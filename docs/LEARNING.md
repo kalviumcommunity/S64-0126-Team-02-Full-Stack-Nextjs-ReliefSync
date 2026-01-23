@@ -66,18 +66,6 @@ export const revalidate = 60;
 
 Using Static, Dynamic, and Hybrid rendering together helps build fast, scalable, and real-world production-ready applications. The App Router allows selecting the best strategy per page based on data requirements.
 
----
-
-If you want, I can:
-
-* Make it **even shorter**
-* Add **screenshots/logs section**
-* Convert it into **submission or evaluation format**
-
-Just say the word 👌
-
-
-
 
 
 
@@ -179,4 +167,47 @@ Restores the chain of trust.
 
 ## Conclusion
 Docker ensures consistency of artifacts; CI/CD ensures consistency of delivery. Secure configuration and clean handoffs prevent deployment loops.
-EOF
+
+<br>
+
+### 2.9 :  # TypeScript & ESLint Configuration
+
+
+## Question
+
+## 1. Why Strict TypeScript Mode Reduces Runtime Bugs
+
+Strict mode acts as a safety net that catches errors **before** you run the code.
+
+*   **Catches "Null" Errors:** Prevents crashes by forcing you to handle missing data (`null`/`undefined`).
+*   **No Guesswork:** Stops you from using variables without explicit types ("implicit any").
+*   **Early Detection:** Finds typos and logic flaws during coding, not in production.
+
+**Impact:** A "compile-time" spell-checker that prevents simple mistakes from becoming production crashes.
+
+---
+
+## 2. What ESLint + Prettier Rules Enforce
+
+*   **ESLint (Quality Control):** Catch logical errors, unused variables, and bad practices (e.g., "don't use `var`").
+*   **Prettier (Style Enforcer):** Automatically formats code (spacing, commas, semicolons) on save.
+
+**Impact:** No more debates about code style. The codebase looks like it was written by one person, regardless of team size.
+
+---
+
+## 3. How Pre-Commit Hooks Improve Team Consistency
+
+Tools like **Husky** run checks automatically when you try to commit code.
+
+*   **Gatekeeper:** Blocks commits if linting fails or tests don't pass.
+*   **Automation:** Ensures no one "forgets" to format their code or check for errors.
+*   **Shared Standards:** Enforces the same rules for every developer on the team.
+
+**Impact:** Keeps the "main" branch clean. Broken or messy code never leaves your local machine.
+
+---
+
+## Conclusion
+TypeScript prevents bugs. ESLint/Prettier clean up the mess. Husky locks the door so bad code can't get out. Together, they guarantee a professional, stable codebase.
+
