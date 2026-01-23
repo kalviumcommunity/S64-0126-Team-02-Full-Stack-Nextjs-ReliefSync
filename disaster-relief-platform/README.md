@@ -45,7 +45,7 @@ Run locally:
 ```
 npm run dev
 ```
-The application runs at http://localhost:3000
+The application runs at ```http://localhost:3000```
 
 ---
 
