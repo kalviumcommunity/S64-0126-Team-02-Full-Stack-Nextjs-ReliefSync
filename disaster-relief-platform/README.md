@@ -30,6 +30,7 @@ src/
 ├── lib/
 │   └── constants.ts     # Utilities and shared helpers
 ```
+
 This structure ensures separation of concerns and supports scalability in future sprints.
 
 ---
