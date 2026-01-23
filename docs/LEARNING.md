@@ -79,6 +79,146 @@ Just say the word 👌
 
 
 
+### 2.4 : [Concept 2] # Environment-Aware Builds & Secrets Management in Production
+
+
+### Overview
+In this project, we implemented **environment-aware builds** to ensure that our Next.js full-stack application behaves correctly across **development, staging, and production** environments. We also adopted **secure secrets management practices** to prevent sensitive data exposure and improve deployment reliability.
+
+---
+
+## 1. Environment-Aware Builds
+
+### Environment Files
+We created separate environment configuration files for each deployment stage:
+
+- `.env.development`
+- `.env.staging`
+- `.env.production`
+- `.env.example` *(tracked in GitHub)*
+
+Each file contains **only environment-specific variables**.
+
+### Example Configuration
+
+```env
+# .env.staging
+NEXT_PUBLIC_API_URL=https://staging.api.relief-dashboard.com
+DATABASE_URL=postgres://user:password@staging-db:5432/reliefdb
+REDIS_URL=redis://staging-redis:6379
+````
+
+### `.env.example`
+
+```env
+NEXT_PUBLIC_API_URL=
+DATABASE_URL=
+REDIS_URL=
+JWT_SECRET=
+```
+
+> ⚠️ Actual secrets are **never committed** to the repository.
+
+---
+
+## 2. Build Scripts per Environment
+
+We defined **environment-specific build scripts** in `package.json`:
+
+```json
+{
+  "scripts": {
+    "build:dev": "next build",
+    "build:staging": "NODE_ENV=staging next build",
+    "build:production": "NODE_ENV=production next build"
+  }
+}
+```
+
+This ensures the **correct environment configuration** is used during CI/CD deployments.
+
+---
+
+## 3. Secure Secrets Management
+
+### GitHub Secrets
+
+All sensitive credentials are stored securely using **GitHub Secrets**, including:
+
+* `DATABASE_URL`
+* `JWT_SECRET`
+* `REDIS_URL`
+* Cloud provider credentials
+
+Secrets are injected into the workflow **at runtime** and are never exposed in logs or source code.
+
+### Cloud Secret Stores (Optional)
+
+For production deployments, secrets can also be stored in:
+
+* **AWS Systems Manager Parameter Store**
+* **Azure Key Vault**
+
+This allows **centralized secret rotation** and fine-grained access control.
+
+---
+
+## 4. CI/CD Integration
+
+In **GitHub Actions**, secrets are referenced like this:
+
+```yaml
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+```
+
+Each environment (**staging / production**) uses **different secret values** to prevent cross-environment contamination.
+
+---
+
+## 5. Verification & Testing
+
+We verified environment isolation by running:
+
+```bash
+npm run build:staging
+npm run build:production
+```
+
+Each build connected to the **correct database, Redis instance, and API endpoints** without any code changes.
+
+---
+
+## 6. Why Multi-Environment Setups Matter
+
+* Prevents accidental production outages
+* Enables safe testing before releases
+* Improves CI/CD reliability
+* Makes debugging faster and safer
+* Aligns with real-world DevOps best practices
+
+---
+
+## 7. Challenges & Learnings
+
+### Challenges
+
+* Missing environment variables during CI builds
+* Incorrect `.gitignore` setup initially
+* Debugging mismatched environment configurations
+
+### Learnings
+
+* Always validate environment variables early in the build
+* Never hardcode secrets
+* Treat environments as isolated systems
+
+---
+
+### Conclusion
+By implementing environment-aware builds and secure secrets management, we ensured safe, scalable, and production-ready deployments. This approach mirrors industry-standard DevOps practices and significantly improves deployment confidence.
+
 
 
 
