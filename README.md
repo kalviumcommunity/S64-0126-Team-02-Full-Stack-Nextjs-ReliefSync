@@ -68,3 +68,6 @@ This folder structure was chosen to keep the codebase modular and scalable. Sepa
 - NGO and Government dashboards
 - Database and caching integration
 - Docker, CI/CD, and cloud deployment
+
+
+

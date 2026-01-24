@@ -211,3 +211,49 @@ Tools like **Husky** run checks automatically when you try to commit code.
 ## Conclusion
 TypeScript prevents bugs. ESLint/Prettier clean up the mess. Husky locks the door so bad code can't get out. Together, they guarantee a professional, stable codebase.
 
+
+
+## 🔐 Environment Variable Management
+
+This project uses environment variables to securely manage configuration and secrets.
+
+### Environment Files
+
+- `.env.local`
+  - Contains real credentials and secrets
+  - Used only in local development
+  - Never committed to GitHub
+
+- `.env.example`
+  - Template file listing all required variables
+  - Uses placeholder values
+  - Safe to commit and share
+
+### Variable Types
+
+#### Server-side Only
+These variables are **never exposed to the browser**:
+- `DATABASE_URL`
+- `JWT_SECRET`
+
+They are accessed only in server components, API routes, or server actions.
+
+#### Client-side Safe Variables
+These variables are safe to expose and **must start with `NEXT_PUBLIC_`**:
+- `NEXT_PUBLIC_API_BASE_URL`
+
+### Security Measures
+
+- `.env.local` is ignored using `.gitignore`
+- No secrets are hardcoded in the repository
+- Client components never access server-only variables
+
+### Common Pitfalls Avoided
+
+- Accidentally exposing secrets by missing `NEXT_PUBLIC_` prefix rules
+- Committing real credentials to GitHub
+- Using server secrets in client-side components
+
+This setup ensures the application is secure, portable, and production-ready.
+
+
