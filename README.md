@@ -69,5 +69,77 @@ This folder structure was chosen to keep the codebase modular and scalable. Sepa
 - Database and caching integration
 - Docker, CI/CD, and cloud deployment
 
+## 🔀 Team Branching & PR Workflow
+
+To maintain code quality and smooth collaboration, our team follows a structured GitHub workflow inspired by real-world engineering practices.
+
+---
+
+### Branch Naming Strategy
+
+We use the following branch naming conventions:
+
+- `feature/<feature-name>` – New features
+- `fix/<bug-name>` – Bug fixes
+- `chore/<task-name>` – Maintenance tasks
+- `docs/<update-name>` – Documentation updates
+
+Example branches:
+- `feature/login-auth`
+- `fix/navbar-alignment`
+- `docs/update-readme`
+
+All development work is done on feature or fix branches. The `main` branch is protected and only updated through reviewed pull requests.
+
+---
+
+### Pull Request Template
+
+We created a standardized PR template located at: ```.github/pull_request_template.md```
+
+This template ensures every PR includes:
+- A clear summary
+- List of changes
+- Screenshots or evidence
+- A quality checklist before merging
+
+---
+
+### Code Review Checklist
+
+Every pull request is reviewed using the following checklist:
+- Code follows naming conventions and structure
+- Feature verified locally
+- No console errors or warnings
+- ESLint and Prettier checks pass
+- No sensitive data exposed
+- Documentation updated if required
+
+---
+
+### Branch Protection Rules
+
+The `main` branch is protected with the following rules:
+- Pull request reviews required before merging
+- At least one reviewer approval
+- Required status checks must pass
+- Direct pushes to `main` are disabled
+
+This ensures all changes are reviewed and validated before reaching production.
+
+---
+
+### 📸 Pull Request Evidence
+
+Below is a screenshot of a real pull request showing checks passing and review completed:
+
+![PR Checks Passing](docs/pr-checks.png)
+
+---
+
+### Reflection
+
+This workflow improves collaboration by enforcing consistency, code reviews, and automated checks. It helps prevent bugs, reduces merge conflicts, and ensures the codebase remains stable as the team scales.
+
 
 
