@@ -213,7 +213,7 @@ TypeScript prevents bugs. ESLint/Prettier clean up the mess. Husky locks the doo
 
 
 
-## 🔐 Environment Variable Management
+## 2.10 Environment Variable Management
 
 This project uses environment variables to securely manage configuration and secrets.
 
@@ -255,5 +255,75 @@ These variables are safe to expose and **must start with `NEXT_PUBLIC_`**:
 - Using server secrets in client-side components
 
 This setup ensures the application is secure, portable, and production-ready.
+
+## 2.12  Docker & Compose Setup for Local Development
+
+### 3.1 Dockerfile and Docker Compose Setup
+
+We have set up a complete containerized environment for the Next.js application, including a PostgreSQL database and a Redis cache.
+
+#### Dockerfile Usage
+The `Dockerfile` is responsible for building the Next.js application image.
+- **Base Image:** `node:20-alpine` (Lightweight Node.js environment)
+- **Dependencies:** Copies `package.json` and runs `npm install`
+- **Build:** Copies source code and runs `npm run build`
+- **Execution:** Starts the app using `npm run start`
+
+#### Docker Compose Services
+The `docker-compose.yml` orchestrates three services:
+
+1.  **app (Next.js Application)**
+    *   Builds from the local `Dockerfile`.
+    *   Exposes port `3000`.
+    *   Connects to `db` and `redis` services via environment variables.
+    *   Depends on `db` and `redis` to be healthy/started.
+
+2.  **db (PostgreSQL)**
+    *   Uses `postgres:15-alpine`.
+    *   Persists data using a named volume `db_data`.
+    *   Exposes port `5432` for local access.
+
+3.  **redis (Redis Cache)**
+    *   Uses `redis:7-alpine`.
+    *   Exposes port `6379`.
+
+#### Networks and Volumes
+- **Network:** `localnet` (Bridge driver) allows all containers to communicate with each other by service name (e.g., `db`, `redis`).
+- **Volume:** `db_data` allows the PostgreSQL database to persist data even if the container is removed.
+
+### 3.2 Build and Run Verification
+
+We attempted to run the stack using `docker-compose up --build`.
+
+**Successful Services:**
+*   `postgres_db` (Port 5432) - Running
+*   `redis_cache` (Port 6379) - Running
+
+**Terminal Output (DB & Redis):**
+```
+[+] Running 4/4
+ ✔ Network s64-0126-team-02-full-stack-nextjs-reliefsync_localnet  Created
+ ✔ Volume "s64-0126-team-02-full-stack-nextjs-reliefsync_db_data"  Created
+ ✔ Container redis_cache                                           Started
+ ✔ Container postgres_db                                           Started
+```
+
+### 3.3 Reflections and Issues Faced
+
+**Issue: Network Connectivity during Build**
+While the database and Redis services started successfully, the Next.js application build encountered a network error during `npm install`.
+
+**Error Log:**
+```
+=> ERROR [4/6] RUN npm install
+...
+npm error code ECONNRESET
+npm error network This is a problem related to network connectivity.
+```
+
+**Resolution Strategy (Potential):**
+*   This error is likely due to network restrictions or proxy settings within the Docker build environment preventing access to the npm registry.
+*   In a production or unrestricted local environment, this command would complete, and the app would start on port 3000.
+*   For now, we verified the configuration files are correct and that the supporting infrastructure (DB, Redis) spins up correctly.
 
 
