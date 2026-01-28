@@ -6,7 +6,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgres://postgres:password@db:5432/mydb
+      - DATABASE_URL=postgresql://postgres:password@db:5432/reliefdb?schema=public
       - REDIS_URL=redis://redis:6379
     depends_on:
       - db
@@ -21,7 +21,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: mydb
+      POSTGRES_DB: reliefdb
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:

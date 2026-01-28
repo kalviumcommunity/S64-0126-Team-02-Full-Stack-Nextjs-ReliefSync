@@ -1,0 +1,163 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ====================================
+// USER MANAGEMENT
+// ====================================
+
+enum UserRole {
+  NGO         // NGO staff members
+  GOVERNMENT  // Government officials/admins
+}
+
+model User {
+  id             Int          @id @default(autoincrement())
+  email          String       @unique
+  name           String
+  passwordHash   String
+  role           UserRole
+  organizationId Int?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Allocations made by this user (if GOVERNMENT)
+  allocationsCreated Allocation[] @relation("AllocationsCreatedBy")
+
+  @@index([email])
+  @@index([organizationId])
+}
+
+// ====================================
+// ORGANIZATION MANAGEMENT
+// ====================================
+
+model Organization {
+  id              Int       @id @default(autoincrement())
+  name            String
+  registrationNo  String    @unique
+  contactEmail    String
+  contactPhone    String
+  address         String
+  city            String
+  state           String
+  country         String    @default("India")
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  users           User[]
+  inventories     Inventory[]
+  allocationsFrom Allocation[] @relation("AllocationFrom")
+  allocationsTo   Allocation[] @relation("AllocationTo")
+
+  @@index([registrationNo])
+  @@index([isActive])
+}
+
+// ====================================
+// INVENTORY MANAGEMENT
+// ====================================
+
+enum ItemCategory {
+  FOOD
+  MEDICINE
+  WATER
+  SHELTER
+  CLOTHING
+  HYGIENE
+  TOOLS
+  OTHER
+}
+
+enum ItemUnit {
+  KG      // Kilograms
+  LITER   // Liters
+  UNIT    // Individual units (bottles, blankets, etc.)
+  BOX     // Boxes
+  PACKET  // Packets
+}
+
+model InventoryItem {
+  id          Int          @id @default(autoincrement())
+  name        String
+  description String?
+  category    ItemCategory
+  unit        ItemUnit
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  inventories Inventory[]
+
+  @@unique([name, category]) // Prevent duplicate item names in same category
+  @@index([category])
+}
+
+model Inventory {
+  id             Int           @id @default(autoincrement())
+  organizationId Int
+  itemId         Int
+  quantity       Float         @default(0) // Use Float to support decimal quantities
+  minThreshold   Float         @default(0) // Alert threshold
+  maxCapacity    Float?        // Optional max storage capacity
+  lastUpdated    DateTime      @default(now())
+  
+  // Relations
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  item           InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, itemId]) // One inventory record per item per organization
+  @@index([organizationId])
+  @@index([itemId])
+  @@index([quantity]) // For queries checking low stock
+}
+
+// ====================================
+// ALLOCATION & TRACKING
+// ====================================
+
+enum AllocationStatus {
+  PENDING    // Requested but not yet approved
+  APPROVED   // Approved by government
+  IN_TRANSIT // Being delivered
+  COMPLETED  // Successfully delivered
+  REJECTED   // Request rejected
+  CANCELLED  // Cancelled by requester
+}
+
+model Allocation {
+  id              Int              @id @default(autoincrement())
+  fromOrgId       Int?             // Source organization (can be null for government direct allocation)
+  toOrgId         Int              // Recipient organization
+  itemId          Int
+  quantity        Float
+  status          AllocationStatus @default(PENDING)
+  requestedBy     String           // User name/email who requested
+  approvedBy      Int?             // Government user who approved
+  requestDate     DateTime         @default(now())
+  approvedDate    DateTime?
+  completedDate   DateTime?
+  notes           String?          // Additional comments or reasons
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  fromOrg         Organization?    @relation("AllocationFrom", fields: [fromOrgId], references: [id], onDelete: SetNull)
+  toOrg           Organization     @relation("AllocationTo", fields: [toOrgId], references: [id], onDelete: Restrict)
+  approver        User?            @relation("AllocationsCreatedBy", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([fromOrgId])
+  @@index([toOrgId])
+  @@index([status])
+  @@index([requestDate])
+}
