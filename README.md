@@ -750,4 +750,3 @@ The Prisma ORM setup is fully functional and ready for use in the application!
 **Best Practices** followed per Next.js documentation  
 
 **Result:** A production-ready ORM setup with strong type safety, excellent developer experience, and performance optimizations built-in.
-
