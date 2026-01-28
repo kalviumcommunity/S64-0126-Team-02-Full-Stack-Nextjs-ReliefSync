@@ -750,3 +750,343 @@ The Prisma ORM setup is fully functional and ready for use in the application!
 **Best Practices** followed per Next.js documentation  
 
 **Result:** A production-ready ORM setup with strong type safety, excellent developer experience, and performance optimizations built-in.
+
+---
+
+## 2.15 Database Migrations & Seed Scripts
+
+### What is Database Migration?
+
+A **migration** captures the evolution of your database schema over time. When you modify your Prisma models (add tables, change fields, add constraints), migrations record those changes as SQL scripts that can be applied consistently across your entire team and deployment environments.
+
+**Why Migrations Matter:**
+- ✅ **Reproducibility** – Everyone has the same schema
+- ✅ **Auditability** – See what changed and when
+- ✅ **Safety** – Test migrations before production
+- ✅ **Rollback** – Undo changes if needed
+- ✅ **CI/CD** – Automate deployments with confidence
+
+### Seed Scripts
+
+A **seed script** is a TypeScript/JavaScript file that populates your database with initial test data. This ensures that:
+- Development environments have realistic data
+- Teams don't need to manually create test records
+- Migrations can be reset and seeded consistently
+- Idempotent operations prevent duplicate data
+
+### Current Status
+
+**Migration Files Created:**
+
+```
+prisma/
+├── migrations/
+│   ├── 20260128060658_init_schema/
+│   │   └── migration.sql          # Full schema creation
+│   └── migration_lock.toml        # PostgreSQL lock file
+└── seed.ts                        # Seed script with test data
+```
+
+**Migration Applied:**
+```
+$ npx prisma migrate status
+
+✓ Loaded Prisma config from prisma.config.ts
+✓ Prisma schema loaded from prisma\schema.prisma
+✓ Datasource "db": PostgreSQL database "reliefdb", schema "public" at "localhost:5432"
+
+1 migration found in prisma/migrations
+
+Database schema is up to date!
+```
+
+### Seed Script Implementation
+
+**File:** `prisma/seed.ts` (336 lines)
+
+The seed script is fully implemented with:
+
+```typescript
+// Clear existing data (prevents duplicates)
+await prisma.allocation.deleteMany();
+await prisma.inventory.deleteMany();
+await prisma.inventoryItem.deleteMany();
+await prisma.user.deleteMany();
+await prisma.organization.deleteMany();
+
+// Create Organizations
+const redCross = await prisma.organization.create({
+  data: {
+    name: 'Red Cross India',
+    registrationNo: 'RC-IND-2020-001',
+    contactEmail: 'contact@redcross.india.org',
+    // ... more fields
+  },
+});
+
+// Create Users with bcrypt password hashing
+const users = await prisma.user.createMany({
+  data: [
+    {
+      email: 'admin@gov.in',
+      passwordHash: bcrypt.hashSync('password123', 10),
+      name: 'Government Administrator',
+      role: 'GOVERNMENT',
+    },
+    // ... more users
+  ],
+});
+
+// Create InventoryItems, Inventory records, and Allocations
+// ...
+```
+
+**Key Features:**
+- ✅ Idempotent: Clears data before seeding (no duplicates)
+- ✅ Password hashing: Uses bcrypt for security
+- ✅ Comprehensive data: 3 orgs, 5 users, 8 items, 12 inventory, 5 allocations
+- ✅ Error handling: Try-catch with proper disconnection
+- ✅ Seed reference in `package.json` (configured in prisma.config.ts)
+
+### Running Migrations & Seeds
+
+**1. Create a New Migration**
+
+When you modify `schema.prisma`:
+
+```bash
+$ npx prisma migrate dev --name add_feature_description
+```
+
+This will:
+- Generate migration SQL file
+- Apply changes to your database
+- Update generated Prisma Client types
+
+**2. Run the Seed Script**
+
+```bash
+$ npx prisma db seed
+```
+
+**Successful Seed Output:**
+
+```
+Loaded Prisma config from prisma.config.ts.
+
+Running seed command `tsx prisma/seed.ts` ...
+🌱 Starting database seeding...
+✅ Cleared existing data
+✅ Created 3 NGO organizations
+✅ Created 5 users (2 Government, 3 NGO)
+✅ Created 8 inventory items
+✅ Created 12 inventory records across 3 organizations
+✅ Created 5 allocation records with various statuses
+
+🎉 Database seeding completed successfully!
+
+📊 Summary:
+  - 3 NGO Organizations
+  - 5 Users (2 Government, 3 NGO)
+  - 8 Relief Item Types
+  - 12 Inventory Records
+  - 5 Allocation Records
+
+🔐 Login Credentials (all passwords: password123):
+  Government:
+    - admin@gov.in
+    - coordinator@ndma.gov.in
+  NGOs:
+    - manager@redcross.india.org (Red Cross)
+    - manager@careindia.org (Care India)
+    - manager@oxfamindia.org (Oxfam India)
+```
+
+**3. Verify Seed Data**
+
+Open Prisma Studio to visually inspect seeded data:
+
+```bash
+$ npx prisma studio
+# Opens http://localhost:5555
+```
+
+Browse tables to confirm:
+- ✅ 3 organizations created
+- ✅ 5 users with hashed passwords
+- ✅ 8 inventory items defined
+- ✅ 12 inventory allocations
+- ✅ 5 allocation workflow records
+
+### Rollback & Reset
+
+**Safe Rollback in Development:**
+
+```bash
+# Reset entire database (lose all data!)
+$ npx prisma migrate reset
+# This will:
+# 1. Delete database
+# 2. Re-run all migrations
+# 3. Re-run seed script
+```
+
+**In Production (Careful!):**
+
+```bash
+# Revert to previous migration state
+$ npx prisma migrate resolve --rolled-back 20260128060658_init_schema
+```
+
+**Best Practice:** Use `migrate resolve` only after manually reverting SQL changes in production database with backup.
+
+### Migration Workflow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Development: Modify schema.prisma                       │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+        ┌────────────────────────────┐
+        │ npx prisma migrate dev     │
+        │ --name add_feature         │
+        └────────┬───────────────────┘
+                 │
+                 ▼
+    ┌──────────────────────────────────┐
+    │ Generated SQL Migration File      │
+    │ in prisma/migrations/            │
+    └────────┬─────────────────────────┘
+             │
+             ▼
+    ┌──────────────────────────────────┐
+    │ Applied to Local PostgreSQL DB    │
+    └────────┬─────────────────────────┘
+             │
+             ▼
+    ┌──────────────────────────────────┐
+    │ Prisma Client Types Updated      │
+    └────────┬─────────────────────────┘
+             │
+             ▼
+    ┌──────────────────────────────────┐
+    │ Commit migration to Git          │
+    └────────┬─────────────────────────┘
+             │
+             ▼
+    ┌──────────────────────────────────┐
+    │ CI/CD Pipeline                   │
+    │ - Test migrations on staging     │
+    │ - Apply to production            │
+    └──────────────────────────────────┘
+```
+
+### Production Data Protection
+
+**Our Approach:**
+
+1. **Staging Database** – Test all migrations on production-like DB first
+2. **Backups** – Always backup production before migration
+   ```bash
+   pg_dump reliefdb > backup_$(date +%Y%m%d_%H%M%S).sql
+   ```
+3. **Dry Run** – Use `--skip-generate` flag to preview without applying
+4. **Idempotent Seeds** – Seeds clear old data, preventing conflicts
+5. **Version Control** – All migrations in Git for auditability
+6. **Monitoring** – Track migration execution time and lock issues
+
+**Rollback Plan:**
+
+```bash
+# If production migration fails:
+# 1. Restore from backup
+psql reliefdb < backup_20260128_120000.sql
+
+# 2. Revert migration in version control
+# 3. Fix schema issue
+# 4. Test on staging
+# 5. Deploy fix to production
+```
+
+### Schema Versioning
+
+Current schema version: **v1.0** (Initial setup)
+- 5 tables: User, Organization, InventoryItem, Inventory, Allocation
+- 15+ indexes for query performance
+- Foreign key constraints for data integrity
+- Timestamp tracking (createdAt, updatedAt) on all entities
+
+### Reflections & Lessons Learned
+
+**Why This Approach Works:**
+
+1. **Reproducibility** – Any developer can reset to clean state instantly
+   - `npx prisma migrate reset` takes ~5 seconds
+   - Entire team has identical schema
+   - No "works on my machine" issues
+
+2. **Auditability** – Every schema change is tracked
+   - See who changed what and when (via Git history)
+   - Migration files are human-readable SQL
+   - Easy to understand database evolution
+
+3. **Safety** – Migrations are reversible
+   - Test migrations before production
+   - Rollback plan in place
+   - No surprise schema mismatches
+
+4. **Scalability** – Pattern works for 100+ tables
+   - Migrations can be organized by feature
+   - Multiple teams can work on different schema areas
+   - Merge conflicts in seed data are rare (different orgs/users)
+
+5. **Developer Experience** – No manual SQL needed
+   - Prisma generates migrations from schema
+   - TypeScript types auto-update
+   - `npx prisma studio` beats psql for casual browsing
+
+**Gotchas We Avoided:**
+
+- ❌ Hardcoded database credentials → ✅ Using .env variables
+- ❌ Manual SQL migrations → ✅ Prisma auto-generates from schema
+- ❌ Duplicate seed data on reset → ✅ Clear old data first (idempotent)
+- ❌ Untracked migrations in Git → ✅ Entire migrations/ folder committed
+- ❌ No production backup → ✅ Always backup before production migration
+
+### Next Steps
+
+1. **Feature Branches** – When adding features, update schema then migrate
+   ```bash
+   git checkout -b feature/add-notifications
+   # Update schema.prisma
+   npx prisma migrate dev --name add_notifications_table
+   ```
+
+2. **Integration Tests** – Reset DB and seed before running tests
+   ```typescript
+   beforeAll(async () => {
+     await exec('npx prisma migrate reset --skip-seed');
+     await exec('npx prisma db seed');
+   });
+   ```
+
+3. **Deployment** – CI/CD pipeline applies migrations before starting app
+   ```bash
+   npx prisma migrate deploy  # Applies pending migrations (safe for prod)
+   ```
+
+4. **Monitoring** – Track migration performance on production
+   - Migration execution time
+   - Lock duration
+   - Rollback frequency (if needed)
+
+### Summary
+
+**Database Migrations** provide version control for your schema  
+**Seed Scripts** ensure consistent test data across all environments  
+**Prisma Migrate** generates SQL from TypeScript models  
+**Rollback Safety** with backups and staging testing  
+**Production Ready** with careful deployment practices  
+
+**Result:** Team can confidently evolve database schema together, with reproducible migrations and idempotent seeding.
