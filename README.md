@@ -401,3 +401,353 @@ npx prisma studio
 cat prisma/migrations/20260128060658_init_schema/migration.sql
 ```
 
+---
+
+## 2.14 Prisma ORM Setup & Client Initialisation
+
+### Overview
+
+Prisma ORM is integrated into the Next.js application as the primary data access layer. It provides type-safe database queries, automatic migrations, and seamless TypeScript integration. The client is initialized as a singleton to prevent connection pool exhaustion during development.
+
+---
+
+### What is Prisma ORM?
+
+**Prisma** is a modern Node.js and TypeScript ORM that:
+- Generates type-safe database clients from your schema
+- Provides an intuitive API for querying databases
+- Handles migrations automatically with version control
+- Reduces boilerplate SQL code significantly
+- Prevents SQL injection with parameterized queries
+- Offers a visual database editor (Prisma Studio)
+
+**Benefits for This Project:**
+- Type-safe queries catch errors at compile-time (not runtime)
+- Auto-generated types mean no manual type definitions
+- Migrations are version-controlled and reversible
+- Queries are readable and maintainable
+- Relationship loading with `include()` prevents N+1 queries
+
+---
+
+### Installation & Setup
+
+#### **1. Installed Prisma**
+```bash
+npm install @prisma/client prisma @prisma/adapter-pg pg
+npm install --save-dev @types/node @types/pg
+```
+
+#### **2. Prisma Already Initialized**
+```bash
+npx prisma init
+```
+
+Created:
+- `prisma/schema.prisma` – Data models
+- `prisma/migrations/` – Version-controlled schema changes
+- `.env` – Database connection string
+
+#### **3. Configuration**
+- **File:** `prisma.config.ts`
+- **Database:** PostgreSQL 15 (via Docker Compose)
+- **Adapter:** `@prisma/adapter-pg` for optimal PostgreSQL support
+- **Schema:** Located in `prisma/schema.prisma`
+
+---
+
+### Prisma Client Singleton Pattern
+
+#### **File:** `src/lib/prisma.ts`
+
+```typescript
+import { PrismaClient } from '@prisma/client';
+
+declare global {
+  var prisma: PrismaClient | undefined;
+}
+
+export const prisma =
+  global.prisma ||
+  new PrismaClient({
+    log:
+      process.env.NODE_ENV === 'development'
+        ? ['query', 'error', 'warn']
+        : ['error'],
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  global.prisma = prisma;
+}
+```
+
+**Why This Pattern?**
+- Reuses connection pool across hot reloads
+- Prevents "too many connections" errors
+- Logs queries in development for debugging
+- Silent in production (only errors logged)
+- Standard Next.js best practice
+
+---
+
+### Query Functions & Type Safety
+
+Organized query functions in `src/lib/queries/` directory with 15+ functions:
+
+#### **1. Users** (`src/lib/queries/users.ts`)
+- `getUsers()` – All users with organization
+- `getUserByEmail(email)` – Single user with allocations
+- `getUsersByRole(role)` – Filter by NGO or GOVERNMENT
+- `countUsers()` – Total user count
+
+#### **2. Organizations** (`src/lib/queries/organizations.ts`)
+- `getOrganizations()` – All orgs with counts
+- `getOrganizationById(id)` – Single org with full details
+- `getActiveOrganizations()` – Only active NGOs
+- `countOrganizations()` – Total count
+- `getOrganizationByRegistration(regNo)` – Lookup by registration
+
+#### **3. Allocations** (`src/lib/queries/allocations.ts`)
+- `getAllAllocations()` – All allocations with relationships
+- `getAllocationsByStatus(status)` – Filter by workflow state
+- `getAllocationsToOrganization(orgId)` – Received allocations
+- `getAllocationsFromOrganization(orgId)` – Sent allocations
+- `getPendingAllocations()` – Urgent approvals needed
+- `countAllocationsByStatus()` – Status distribution
+- `getAllocationsByDateRange(start, end)` – Time-based queries
+
+---
+
+### Type Safety in Action
+
+#### **Example: Compile-Time Type Checking**
+```typescript
+import { getUsers } from '@/lib/queries/users';
+
+const users = await getUsers();
+// ✅ Type: Array<User & { organization: Organization | null }>
+
+users[0].name           // ✅ Property exists
+users[0].organization?.name  // ✅ Safe optional chaining
+users[0].invalidProp    // ❌ TypeScript error (property doesn't exist)
+```
+
+#### **Prevent N+1 Queries**
+```typescript
+// ✅ Single query with eager loading
+const orgs = await prisma.organization.findMany({
+  include: {
+    users: true,           // Loaded in same query
+    inventories: true,     // No extra queries
+    allocationsFrom: true,
+  },
+});
+```
+
+---
+
+### Query Execution & Performance
+
+#### **Connected to Database**
+```
+Database: PostgreSQL reliefdb
+Host: localhost:5432
+Migration: 20260128060658_init_schema (5 tables, 13 indexes)
+Seeded Data: 3 organizations, 5 users, 8 items, 12 inventory, 5 allocations
+```
+
+#### **Example Query Output**
+```typescript
+const ngoUsers = await getUsersByRole('NGO');
+// ✅ Returns:
+// [
+//   {
+//     id: 3,
+//     email: 'manager@redcross.india.org',
+//     name: 'Rajesh Kumar',
+//     role: 'NGO',
+//     organizationId: 1,
+//     organization: { id: 1, name: 'Red Cross India', ... }
+//   },
+//   ...
+// ]
+```
+
+---
+
+### Prisma Studio: Visual Database Explorer
+
+**Interactive GUI for data exploration:**
+```bash
+npx prisma studio
+# Opens http://localhost:5555
+```
+
+**Features:**
+- Browse all tables and records
+- Add/edit/delete records visually
+- View relationships between tables
+- Filter and search data
+- Perfect for testing queries during development
+
+**Screenshot Shows:**
+- 5 tables with all relationships
+- Sample data from seeding
+- Type information for each column
+
+---
+
+### Developer Experience Benefits
+
+#### **1. Type Safety**
+```typescript
+// ✅ Errors caught at compile-time, not runtime
+const user = await prisma.user.findUnique({ where: { id: 1 } });
+user.organization?.name;  // ✅ Safe, autocomplete works
+```
+
+#### **2. Readable Queries**
+```typescript
+// ✅ Declarative, SQL-like but better
+const results = await prisma.allocation.findMany({
+  where: {
+    status: 'PENDING',
+    toOrgId: 1,
+  },
+  include: { fromOrg: true, toOrg: true },
+  orderBy: { requestDate: 'asc' },
+  take: 10,
+});
+```
+
+#### **3. IDE Autocomplete**
+```typescript
+await prisma.user.
+//              ↓ Shows: findMany | findUnique | findFirst | count | create | update | delete
+
+await prisma.user.findMany({
+  where: {
+    //  ↓ Shows: id | email | name | role | organizationId ...
+    email: { contains: '' },
+  },
+});
+```
+
+#### **4. Automatic Migrations**
+```bash
+# 1. Edit prisma/schema.prisma
+# 2. Run: npx prisma migrate dev --name describe_change
+# 3. Automatic migration created in prisma/migrations/
+# 4. All version-controlled and reversible
+```
+
+---
+
+### Real-World Use Cases in This Project
+
+| Use Case | Query Function | Benefit |
+|----------|---|---|
+| NGO Dashboard | `getOrganizationById()` | Get all inventory with organization |
+| Government Admin | `getAllocationsByStatus('PENDING')` | See urgent approvals |
+| Low Stock Alert | Custom: `quantity < minThreshold` | Prevent shortages |
+| Audit Trail | `getAllocationsByDateRange()` | Compliance reporting |
+| Org Lookup | `getOrganizationByRegistration()` | Registration-based access |
+
+---
+
+### Reflections on Prisma ORM
+
+**Strengths:**
+**Type Safety** – Errors caught before runtime  
+**Developer Productivity** – Less boilerplate, more readable  
+**Migration Management** – Version-controlled schema changes  
+**Relationship Loading** – Prevents N+1 query problems  
+**Query Builder** – Intuitive API vs raw SQL strings  
+**Debugging** – Prisma Studio for visual exploration  
+**IDE Support** – Full autocomplete and type hints  
+
+**Why Prisma Over Raw SQL:**
+- Raw SQL: String-based, typos cause runtime errors
+- Raw SQL: N+1 query problems hard to debug
+- Raw SQL: No IDE autocomplete
+- Prisma: Type-safe, prevents classes of errors
+- Prisma: Query builder prevents N+1
+- Prisma: Full IDE support
+
+**How It Improves Code Quality:**
+1. **Compile-Time Safety** – TypeScript catches errors before execution
+2. **Readable Queries** – SQL-like but more intuitive
+3. **Less Code** – No manual mapping from SQL to objects
+4. **Consistency** – Same patterns everywhere
+5. **Easy Refactoring** – Rename a field, get compilation errors
+
+---
+
+### File Structure
+
+```
+src/
+├── lib/
+│   ├── prisma.ts                 #  Singleton pattern
+│   └── queries/
+│       ├── users.ts              # 4 user queries
+│       ├── organizations.ts       # 5 organization queries
+│       └── allocations.ts         # 6 allocation queries
+│
+prisma/
+├── schema.prisma                 # 5 models, 4 enums
+├── migrations/
+│   └── 20260128060658_init_schema/
+│       └── migration.sql          # Generated SQL
+└── seed.ts                        # Test data
+```
+
+---
+
+### Testing & Verification
+
+Created `test-queries.ts` to verify database connection and query execution:
+
+```bash
+$ npx tsx test-queries.ts
+```
+
+**Screenshot Evidence:**
+
+![Prisma Query Test Results](docs/prisma-test-results.png)
+
+---
+
+**Evidence of Success:**
+1. ✅ Successful database connection using PrismaClient with PrismaPg adapter
+2. ✅ Type-safe queries executing correctly
+3. ✅ Relationship loading working (organizations included with users/allocations)
+4. ✅ Aggregations functioning (`_count` for user totals)
+5. ✅ All 4 test queries passed without errors
+
+The Prisma ORM setup is fully functional and ready for use in the application!
+
+---
+
+### Next Steps for Implementation
+
+1. **Use in API Routes** – Import and call query functions
+2. **Use in Server Components** – Fetch data directly in React
+3. **Add Caching** – Wrap queries with Redis for performance
+4. **Error Handling** – Add try-catch and validation
+5. **Aggregations** – Create dashboard summary queries
+6. **Real-time Updates** – Extend with WebSocket subscriptions
+
+---
+
+### Summary
+
+**Prisma Client** initialized as singleton in `src/lib/prisma.ts`  
+**15+ Query Functions** organized in `src/lib/queries/`  
+**Type-Safe Queries** with auto-generated TypeScript types  
+**Database Connected** with test data seeded  
+**Prisma Studio** available for visual exploration  
+**Best Practices** followed per Next.js documentation  
+
+**Result:** A production-ready ORM setup with strong type safety, excellent developer experience, and performance optimizations built-in.
+
