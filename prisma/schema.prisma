@@ -158,6 +158,7 @@ model Allocation {
 
   @@index([fromOrgId])
   @@index([toOrgId])
+  @@index([itemId])
   @@index([status])
   @@index([requestDate])
 }

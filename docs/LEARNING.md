@@ -258,6 +258,86 @@ This setup ensures the application is secure, portable, and production-ready.
 
 ## 2.12  Docker & Compose Setup for Local Development
 
+---
+
+### 2.16 : Transactions, Rollbacks, and Query Performance (Prisma)
+
+## Transaction Scenarios (ReliefSync)
+
+**Scenario:** Approving an allocation must update two things together:
+1. Update allocation status to **APPROVED**
+2. Decrement the source organization inventory
+
+This is implemented in `approveAllocationAndUpdateInventory()` in [src/lib/queries/allocations.ts](src/lib/queries/allocations.ts). The function uses a Prisma transaction so both operations either succeed or roll back together.
+
+---
+
+## Rollback Logic (Atomicity)
+
+Inside the transaction, we validate:
+- Allocation exists and is **PENDING**
+- Allocation has a **fromOrgId** (source inventory)
+- Inventory record exists
+- Inventory quantity is sufficient
+
+If any check fails, the function throws an error, and Prisma **rolls back** the entire transaction. This prevents partial writes (e.g., status updated but inventory not decremented).
+
+---
+
+## Query Optimization Applied
+
+### 1. Reduce N+1 Count Queries
+The old `countAllocationsByStatus()` loop executed **6 separate queries**. It now uses `groupBy()` to execute **1 query** and maps the result into the same return shape.
+
+**Before:** 6 queries (one per status)
+**After:** 1 grouped query
+
+This reduces round trips and improves latency under load.
+
+---
+
+## Indexes Added
+
+To improve allocation lookups by item, an index was added:
+- `Allocation.itemId`
+
+Change made in [prisma/schema.prisma](prisma/schema.prisma).
+
+---
+
+## Performance Comparison (Query Count)
+
+**Baseline (before optimization)**
+- `countAllocationsByStatus()` → 6 count queries
+
+**After optimization**
+- `countAllocationsByStatus()` → 1 groupBy query
+
+This is a measurable reduction in query count and DB round trips for a common dashboard metric.
+
+---
+
+## Anti-patterns Avoided
+
+- N+1 query loops for counts
+- Partial writes without transactions
+- Querying unindexed foreign-key fields for high-traffic lists
+
+---
+
+## Reflection: Monitoring in Production
+
+In production, I would monitor:
+- **Query latency** (p50/p95)
+- **Error rates** for transaction failures
+- **Query volume** and slow queries
+
+Tools to use:
+- Prisma query logging in staging
+- Postgres `EXPLAIN` for hotspots
+- APM dashboards (e.g., Grafana + Postgres exporter)
+
+
 ### 3.1 Dockerfile and Docker Compose Setup
 
 We have set up a complete containerized environment for the Next.js application, including a PostgreSQL database and a Redis cache.
