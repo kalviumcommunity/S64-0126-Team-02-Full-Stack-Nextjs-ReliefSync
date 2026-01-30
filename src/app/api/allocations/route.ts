@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AllocationStatus } from "@prisma/client";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 /**
  * GET /api/allocations
@@ -35,23 +36,21 @@ export async function GET(req: Request) {
         take: limit,
         orderBy: { requestDate: "desc" },
       }),
-      prisma.allocation.count(whereClause ? { where: whereClause } : {}),
+      prisma.allocation.count(whereClause ? { where: whereClause } : undefined),
     ]);
 
-    return NextResponse.json({
-      data: allocations,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+    return sendSuccess(allocations, "Allocations retrieved successfully", 200, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error("Error fetching allocations:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to fetch allocations",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -66,19 +65,18 @@ export async function POST(req: Request) {
     const { fromOrgId, toOrgId, itemId, quantity, requestedBy, notes } = body;
 
     if (!toOrgId || !itemId || !quantity || !requestedBy) {
-      return NextResponse.json(
-        {
-          error:
-            "Missing required fields: toOrgId, itemId, quantity, requestedBy",
-        },
-        { status: 400 }
+      return sendError(
+        "Missing required fields: toOrgId, itemId, quantity, requestedBy",
+        ERROR_CODES.MISSING_REQUIRED_FIELD,
+        400
       );
     }
 
     if (quantity <= 0) {
-      return NextResponse.json(
-        { error: "Quantity must be greater than 0" },
-        { status: 400 }
+      return sendError(
+        "Quantity must be greater than 0",
+        ERROR_CODES.INVALID_INPUT,
+        400
       );
     }
 
@@ -86,9 +84,10 @@ export async function POST(req: Request) {
       where: { id: toOrgId },
     });
     if (!toOrg) {
-      return NextResponse.json(
-        { error: "Recipient organization not found" },
-        { status: 404 }
+      return sendError(
+        "Recipient organization not found",
+        ERROR_CODES.ORGANIZATION_NOT_FOUND,
+        404
       );
     }
 
@@ -97,9 +96,10 @@ export async function POST(req: Request) {
         where: { id: fromOrgId },
       });
       if (!fromOrg) {
-        return NextResponse.json(
-          { error: "Source organization not found" },
-          { status: 404 }
+        return sendError(
+          "Source organization not found",
+          ERROR_CODES.ORGANIZATION_NOT_FOUND,
+          404
         );
       }
     }
@@ -120,15 +120,17 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(
-      { message: "Allocation request created successfully", data: allocation },
-      { status: 201 }
+    return sendSuccess(
+      allocation,
+      "Allocation request created successfully",
+      201
     );
   } catch (error) {
-    console.error("Error creating allocation:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to create allocation request",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }

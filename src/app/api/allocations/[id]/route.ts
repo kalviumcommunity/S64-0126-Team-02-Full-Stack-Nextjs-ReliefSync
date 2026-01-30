@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AllocationStatus } from "@prisma/client";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -8,16 +9,13 @@ type Params = { params: Promise<{ id: string }> };
  * GET /api/allocations/:id
  * Retrieves a specific allocation by ID
  */
-export async function GET(req: Request, { params }: Params) {
+export async function GET(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const allocationId = parseInt(id, 10);
 
     if (isNaN(allocationId)) {
-      return NextResponse.json(
-        { error: "Invalid allocation ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid allocation ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const allocation = await prisma.allocation.findUnique({
@@ -30,18 +28,20 @@ export async function GET(req: Request, { params }: Params) {
     });
 
     if (!allocation) {
-      return NextResponse.json(
-        { error: "Allocation not found" },
-        { status: 404 }
+      return sendError(
+        "Allocation not found",
+        ERROR_CODES.ALLOCATION_NOT_FOUND,
+        404
       );
     }
 
-    return NextResponse.json({ data: allocation });
+    return sendSuccess(allocation, "Allocation retrieved successfully");
   } catch (error) {
-    console.error("Error fetching allocation:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to fetch allocation",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -56,10 +56,7 @@ export async function PUT(req: Request, { params }: Params) {
     const allocationId = parseInt(id, 10);
 
     if (isNaN(allocationId)) {
-      return NextResponse.json(
-        { error: "Invalid allocation ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid allocation ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const body = await req.json();
@@ -70,9 +67,10 @@ export async function PUT(req: Request, { params }: Params) {
     });
 
     if (!existingAllocation) {
-      return NextResponse.json(
-        { error: "Allocation not found" },
-        { status: 404 }
+      return sendError(
+        "Allocation not found",
+        ERROR_CODES.ALLOCATION_NOT_FOUND,
+        404
       );
     }
 
@@ -86,7 +84,7 @@ export async function PUT(req: Request, { params }: Params) {
     ];
 
     if (status && !validStatuses.includes(status)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      return sendError("Invalid status value", ERROR_CODES.INVALID_INPUT, 400);
     }
 
     const updateData: Record<string, unknown> = {};
@@ -110,15 +108,13 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
-    return NextResponse.json({
-      message: "Allocation updated successfully",
-      data: updatedAllocation,
-    });
+    return sendSuccess(updatedAllocation, "Allocation updated successfully");
   } catch (error) {
-    console.error("Error updating allocation:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to update allocation",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -127,16 +123,13 @@ export async function PUT(req: Request, { params }: Params) {
  * DELETE /api/allocations/:id
  * Deletes an allocation by ID
  */
-export async function DELETE(req: Request, { params }: Params) {
+export async function DELETE(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const allocationId = parseInt(id, 10);
 
     if (isNaN(allocationId)) {
-      return NextResponse.json(
-        { error: "Invalid allocation ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid allocation ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const existingAllocation = await prisma.allocation.findUnique({
@@ -144,22 +137,22 @@ export async function DELETE(req: Request, { params }: Params) {
     });
 
     if (!existingAllocation) {
-      return NextResponse.json(
-        { error: "Allocation not found" },
-        { status: 404 }
+      return sendError(
+        "Allocation not found",
+        ERROR_CODES.ALLOCATION_NOT_FOUND,
+        404
       );
     }
 
     await prisma.allocation.delete({ where: { id: allocationId } });
 
-    return NextResponse.json({
-      message: "Allocation deleted successfully",
-    });
+    return sendSuccess({ id: allocationId }, "Allocation deleted successfully");
   } catch (error) {
-    console.error("Error deleting allocation:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to delete allocation",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
