@@ -2,13 +2,9 @@ import type { NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createUserSchema } from "@/lib/schemas/userSchema";
-import {
-  createValidationErrorResponse,
-  createSuccessResponse,
-  createErrorResponse,
-} from "@/lib/validation";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
+import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
+import { sendSuccess } from "@/lib/responseHandler";
+import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 
 /**
  * GET /api/users
@@ -29,10 +25,6 @@ import { ERROR_CODES } from "@/lib/errorCodes";
 export async function GET(req: NextRequest) {
   try {
     // User info is validated and passed by middleware
-    const userId = req.headers.get("x-user-id");
-    const userRole = req.headers.get("x-user-role");
-    const userEmail = req.headers.get("x-user-email");
-
     const { searchParams } = new URL(req.url);
     const page = Number(searchParams.get("page")) || 1;
     const limit = Number(searchParams.get("limit")) || 10;
@@ -67,19 +59,9 @@ export async function GET(req: NextRequest) {
       limit,
       total,
       totalPages: Math.ceil(total / limit),
-      requestedBy: {
-        userId,
-        userRole,
-        userEmail,
-      },
     });
   } catch (error) {
-    return sendError(
-      "Failed to retrieve users",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
-    );
+    return handleDatabaseError(error, "GET /api/users");
   }
 }
 
@@ -92,10 +74,6 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    // User info is validated and passed by middleware
-    const userId = req.headers.get("x-user-id");
-    const userRole = req.headers.get("x-user-role");
-
     const body = await req.json();
 
     // Validate request body with Zod
@@ -106,10 +84,7 @@ export async function POST(req: NextRequest) {
       where: { email: validatedData.email },
     });
     if (existingUser) {
-      return createErrorResponse(
-        "User with this email already exists",
-        400
-      );
+      return createErrorResponse("User with this email already exists", 400);
     }
 
     // Create new user
@@ -134,9 +109,8 @@ export async function POST(req: NextRequest) {
     return createSuccessResponse("User created successfully", user, 201);
   } catch (error) {
     if (error instanceof ZodError) {
-      return createValidationErrorResponse(error);
+      return handleValidationError(error, "POST /api/users");
     }
-    console.error("Error creating user:", error);
-    return createErrorResponse("Internal server error", 500);
+    return handleDatabaseError(error, "POST /api/users");
   }
 }
