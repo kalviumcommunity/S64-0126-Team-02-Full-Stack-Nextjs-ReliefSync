@@ -406,4 +406,169 @@ npm error network This is a problem related to network connectivity.
 *   In a production or unrestricted local environment, this command would complete, and the app would start on port 3000.
 *   For now, we verified the configuration files are correct and that the supporting infrastructure (DB, Redis) spins up correctly.
 
+---
+
+### 2.17 : RESTful API Design with Next.js App Router
+
+## API Route Hierarchy
+
+The project uses Next.js file-based routing under `app/api/`. Each `route.ts` file exports HTTP method handlers.
+
+```
+app/
+ └── api/
+     ├── users/
+     │   ├── route.ts          # GET (list), POST (create)
+     │   └── [id]/
+     │       └── route.ts      # GET, PUT, DELETE by ID
+     ├── organizations/
+     │   ├── route.ts          # GET (list), POST (create)
+     │   └── [id]/
+     │       └── route.ts      # GET, PUT, DELETE by ID
+     ├── allocations/
+     │   ├── route.ts          # GET (list), POST (create)
+     │   └── [id]/
+     │       └── route.ts      # GET, PUT, DELETE by ID
+     └── inventory/
+         ├── route.ts          # GET (list), POST (create/update)
+         └── [id]/
+             └── route.ts      # GET, PUT, DELETE by ID
+```
+
+---
+
+## HTTP Verbs and Resource Actions
+
+| HTTP Verb | Route                    | Action                         |
+|-----------|--------------------------|--------------------------------|
+| GET       | `/api/users`             | List all users (paginated)     |
+| POST      | `/api/users`             | Create a new user              |
+| GET       | `/api/users/:id`         | Get user by ID                 |
+| PUT       | `/api/users/:id`         | Update user by ID              |
+| DELETE    | `/api/users/:id`         | Delete user by ID              |
+| GET       | `/api/organizations`     | List all organizations         |
+| POST      | `/api/organizations`     | Create a new organization      |
+| GET       | `/api/organizations/:id` | Get organization by ID         |
+| PUT       | `/api/organizations/:id` | Update organization by ID      |
+| DELETE    | `/api/organizations/:id` | Delete organization by ID      |
+| GET       | `/api/allocations`       | List allocations (filterable)  |
+| POST      | `/api/allocations`       | Create allocation request      |
+| GET       | `/api/allocations/:id`   | Get allocation by ID           |
+| PUT       | `/api/allocations/:id`   | Update allocation status       |
+| DELETE    | `/api/allocations/:id`   | Delete allocation              |
+| GET       | `/api/inventory`         | List inventory records         |
+| POST      | `/api/inventory`         | Create/update inventory        |
+| GET       | `/api/inventory/:id`     | Get inventory by ID            |
+| PUT       | `/api/inventory/:id`     | Update inventory quantities    |
+| DELETE    | `/api/inventory/:id`     | Delete inventory record        |
+
+---
+
+## Sample Requests & Responses
+
+### Get All Users (Paginated)
+```bash
+curl -X GET "http://localhost:3000/api/users?page=1&limit=10"
+```
+**Response (200 OK):**
+```json
+{
+  "data": [
+    { "id": 1, "email": "alice@ngo.org", "name": "Alice", "role": "NGO" }
+  ],
+  "pagination": { "page": 1, "limit": 10, "total": 1, "totalPages": 1 }
+}
+```
+
+### Create a User
+```bash
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bob@gov.in","name":"Bob","passwordHash":"hashed123","role":"GOVERNMENT"}'
+```
+**Response (201 Created):**
+```json
+{
+  "message": "User created successfully",
+  "data": { "id": 2, "email": "bob@gov.in", "name": "Bob", "role": "GOVERNMENT" }
+}
+```
+
+### Get Allocations by Status
+```bash
+curl -X GET "http://localhost:3000/api/allocations?status=PENDING&page=1&limit=5"
+```
+
+### Create an Allocation Request
+```bash
+curl -X POST http://localhost:3000/api/allocations \
+  -H "Content-Type: application/json" \
+  -d '{"fromOrgId":1,"toOrgId":2,"itemId":1,"quantity":100,"requestedBy":"alice@ngo.org"}'
+```
+**Response (201 Created):**
+```json
+{
+  "message": "Allocation request created successfully",
+  "data": { "id": 1, "status": "PENDING", "quantity": 100 }
+}
+```
+
+### Update Allocation Status
+```bash
+curl -X PUT http://localhost:3000/api/allocations/1 \
+  -H "Content-Type: application/json" \
+  -d '{"status":"APPROVED","approvedBy":2}'
+```
+
+### Error Response (404 Not Found)
+```bash
+curl -X GET http://localhost:3000/api/users/999
+```
+**Response (404):**
+```json
+{ "error": "User not found" }
+```
+
+---
+
+## Pagination, Filtering, and Error Semantics
+
+### Pagination
+All list endpoints support pagination via query parameters:
+- `page` — Page number (default: 1)
+- `limit` — Items per page (default: 10)
+
+Example: `/api/users?page=2&limit=20`
+
+### Filtering
+- `/api/users?role=NGO` — Filter users by role
+- `/api/organizations?isActive=true` — Filter active organizations
+- `/api/allocations?status=PENDING&toOrgId=1` — Filter by status and recipient
+
+### HTTP Status Codes
+
+| Code | Meaning               | Usage                              |
+|------|-----------------------|------------------------------------|
+| 200  | OK                    | Successful GET/PUT/DELETE          |
+| 201  | Created               | Successful POST                    |
+| 400  | Bad Request           | Invalid input or missing fields    |
+| 404  | Not Found             | Resource does not exist            |
+| 500  | Internal Server Error | Unexpected server-side error       |
+
+---
+
+## Reflection: Consistent Naming Improves Maintainability
+
+### Benefits of RESTful Naming Conventions
+1. **Predictability** — Developers know `/api/users` returns users, not `/api/getUsers`
+2. **Discoverability** — Resource hierarchy is clear from URL structure
+3. **Integration** — Frontend teams can guess endpoints without documentation
+4. **Tooling** — REST clients (Postman, curl) work seamlessly
+
+### Anti-patterns Avoided
+- Verb-based routes (`/api/getUsers`, `/api/createOrder`)
+- Inconsistent casing (`/api/Users` vs `/api/allocations`)
+- Missing pagination on large collections
+- Generic error messages without status codes
+
 
