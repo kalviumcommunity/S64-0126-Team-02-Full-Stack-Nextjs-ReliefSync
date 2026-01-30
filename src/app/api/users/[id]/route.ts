@@ -1,18 +1,9 @@
-<<<<<<< HEAD
-import { prisma } from "@/lib/prisma";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
-=======
-import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { updateUserSchema } from "@/lib/schemas/userSchema";
-import {
-  createValidationErrorResponse,
-  createSuccessResponse,
-  createErrorResponse,
-} from "@/lib/validation";
->>>>>>> 14c4207 (zod implementation)
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
+import { createValidationErrorResponse } from "@/lib/validation";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
  * GET /api/users/:id
  * Retrieves a specific user by ID
  */
-export async function GET(req: Request, { params }: Params) {
+export async function GET(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const userId = parseInt(id, 10);
@@ -75,11 +66,7 @@ export async function PUT(req: Request, { params }: Params) {
     const userId = parseInt(id, 10);
 
     if (isNaN(userId)) {
-<<<<<<< HEAD
       return sendError("Invalid user ID", ERROR_CODES.INVALID_ID, 400);
-=======
-      return createErrorResponse("Invalid user ID", 400);
->>>>>>> 14c4207 (zod implementation)
     }
 
     const body = await req.json();
@@ -93,19 +80,7 @@ export async function PUT(req: Request, { params }: Params) {
     });
 
     if (!existingUser) {
-<<<<<<< HEAD
       return sendError("User not found", ERROR_CODES.USER_NOT_FOUND, 404);
-    }
-
-    if (role && !["NGO", "GOVERNMENT"].includes(role)) {
-      return sendError(
-        "Invalid role. Must be NGO or GOVERNMENT",
-        ERROR_CODES.INVALID_INPUT,
-        400
-      );
-=======
-      return createErrorResponse("User not found", 404);
->>>>>>> 14c4207 (zod implementation)
     }
 
     // Update user
@@ -122,24 +97,18 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
-<<<<<<< HEAD
     return sendSuccess(updatedUser, "User updated successfully");
   } catch (error) {
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error updating user:", error);
     return sendError(
       "Failed to update user",
       ERROR_CODES.DATABASE_ERROR,
       500,
       error
     );
-=======
-    return createSuccessResponse("User updated successfully", updatedUser);
-  } catch (error) {
-    if (error instanceof ZodError) {
-      return createValidationErrorResponse(error);
-    }
-    console.error("Error updating user:", error);
-    return createErrorResponse("Internal server error", 500);
->>>>>>> 14c4207 (zod implementation)
   }
 }
 
@@ -147,7 +116,7 @@ export async function PUT(req: Request, { params }: Params) {
  * DELETE /api/users/:id
  * Deletes a user by ID
  */
-export async function DELETE(req: Request, { params }: Params) {
+export async function DELETE(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const userId = parseInt(id, 10);

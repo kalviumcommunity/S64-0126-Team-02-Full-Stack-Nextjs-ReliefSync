@@ -1,18 +1,9 @@
-<<<<<<< HEAD
-import { prisma } from "@/lib/prisma";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
-=======
-import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { updateOrganizationSchema } from "@/lib/schemas/organizationSchema";
-import {
-  createValidationErrorResponse,
-  createSuccessResponse,
-  createErrorResponse,
-} from "@/lib/validation";
->>>>>>> 14c4207 (zod implementation)
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
+import { createValidationErrorResponse } from "@/lib/validation";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -74,11 +65,7 @@ export async function PUT(req: Request, { params }: Params) {
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
-<<<<<<< HEAD
       return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
-=======
-      return createErrorResponse("Invalid organization ID", 400);
->>>>>>> 14c4207 (zod implementation)
     }
 
     const body = await req.json();
@@ -92,15 +79,11 @@ export async function PUT(req: Request, { params }: Params) {
     });
 
     if (!existingOrg) {
-<<<<<<< HEAD
       return sendError(
         "Organization not found",
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
         404
       );
-=======
-      return createErrorResponse("Organization not found", 404);
->>>>>>> 14c4207 (zod implementation)
     }
 
     // Update organization
@@ -109,26 +92,18 @@ export async function PUT(req: Request, { params }: Params) {
       data: validatedData,
     });
 
-<<<<<<< HEAD
     return sendSuccess(updatedOrg, "Organization updated successfully");
-  } catch (error) {
-    return sendError(
-      "Failed to update organization",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
-=======
-    return createSuccessResponse(
-      "Organization updated successfully",
-      updatedOrg
->>>>>>> 14c4207 (zod implementation)
-    );
   } catch (error) {
     if (error instanceof ZodError) {
       return createValidationErrorResponse(error);
     }
     console.error("Error updating organization:", error);
-    return createErrorResponse("Internal server error", 500);
+    return sendError(
+      "Failed to update organization",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
+    );
   }
 }
 

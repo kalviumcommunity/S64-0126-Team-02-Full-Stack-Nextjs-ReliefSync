@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createInventorySchema } from "@/lib/schemas/inventorySchema";
@@ -7,6 +6,8 @@ import {
   createSuccessResponse,
   createErrorResponse,
 } from "@/lib/validation";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 /**
  * GET /api/inventory

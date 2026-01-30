@@ -37,3 +37,11 @@ export {
   type UpdateAllocationInput,
   type AllocationStatus,
 } from "./allocationSchema";
+
+// Auth schemas and types
+export {
+  signupSchema,
+  loginSchema,
+  type SignupInput,
+  type LoginInput,
+} from "./authSchema";

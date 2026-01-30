@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createUserSchema } from "@/lib/schemas/userSchema";
@@ -7,13 +6,25 @@ import {
   createSuccessResponse,
   createErrorResponse,
 } from "@/lib/validation";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
+import { authenticateRequest } from "@/lib/auth";
 
 /**
  * GET /api/users
  * Retrieves all users with pagination support
+ * 
+ * PROTECTED ROUTE - Requires valid JWT token in Authorization header
+ * Header: Authorization: Bearer <token>
  */
 export async function GET(req: Request) {
   try {
+    // Authenticate request
+    const auth = authenticateRequest(req);
+    if (!auth.isAuthenticated || auth.error) {
+      return auth.error!;
+    }
+
     const { searchParams } = new URL(req.url);
     const page = Number(searchParams.get("page")) || 1;
     const limit = Number(searchParams.get("limit")) || 10;
@@ -40,7 +51,7 @@ export async function GET(req: Request) {
         take: limit,
         orderBy: { createdAt: "desc" },
       }),
-      prisma.user.count(where ? { where } : {}),
+      prisma.user.count(where ? { where } : undefined),
     ]);
 
     return sendSuccess(users, "Users retrieved successfully", 200, {
