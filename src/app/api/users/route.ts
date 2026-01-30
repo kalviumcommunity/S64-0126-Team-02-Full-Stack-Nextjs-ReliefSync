@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createUserSchema } from "@/lib/schemas/userSchema";
@@ -8,22 +9,29 @@ import {
 } from "@/lib/validation";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
-import { authenticateRequest } from "@/lib/auth";
 
 /**
  * GET /api/users
  * Retrieves all users with pagination support
- * 
+ *
  * PROTECTED ROUTE - Requires valid JWT token in Authorization header
- * Header: Authorization: Bearer <token>
+ * All authenticated users (both NGO and GOVERNMENT roles) can access this endpoint.
+ *
+ * Middleware Validation:
+ * - Validates JWT token from Authorization header
+ * - Passes user info via x-user-id, x-user-email, x-user-role headers
+ *
+ * Query Parameters:
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 10)
+ * - role: Filter by role (NGO or GOVERNMENT, optional)
  */
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    // Authenticate request
-    const auth = authenticateRequest(req);
-    if (!auth.isAuthenticated || auth.error) {
-      return auth.error!;
-    }
+    // User info is validated and passed by middleware
+    const userId = req.headers.get("x-user-id");
+    const userRole = req.headers.get("x-user-role");
+    const userEmail = req.headers.get("x-user-email");
 
     const { searchParams } = new URL(req.url);
     const page = Number(searchParams.get("page")) || 1;
@@ -59,6 +67,11 @@ export async function GET(req: Request) {
       limit,
       total,
       totalPages: Math.ceil(total / limit),
+      requestedBy: {
+        userId,
+        userRole,
+        userEmail,
+      },
     });
   } catch (error) {
     return sendError(
@@ -73,9 +86,16 @@ export async function GET(req: Request) {
 /**
  * POST /api/users
  * Creates a new user with Zod validation
+ *
+ * PROTECTED ROUTE - Requires valid JWT token
+ * Both NGO and GOVERNMENT users can create new users (configurable as needed)
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    // User info is validated and passed by middleware
+    const userId = req.headers.get("x-user-id");
+    const userRole = req.headers.get("x-user-role");
+
     const body = await req.json();
 
     // Validate request body with Zod
