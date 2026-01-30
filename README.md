@@ -2464,3 +2464,328 @@ export async function GET(req: NextRequest) {
 - NGO users restricted from admin functions
 - Authenticated user context preserved for request handlers
 - Extensible design for adding new roles and routes
+
+---
+
+## 2.22 Error Handling Middleware
+
+### Overview
+
+A **centralized error handling system** has been implemented to ensure consistent, structured error handling across all API endpoints. This system:
+
+1. **Catches and categorizes errors** by type (validation, database, authentication, authorization)
+2. **Logs detailed information** for debugging while hiding sensitive data in production
+3. **Provides safe, user-friendly responses** without exposing implementation details
+4. **Maintains structured logs** for monitoring and observability
+
+### Why Centralized Error Handling Matters
+
+Without centralized error handling:
+- ❌ Errors are scattered across routes with inconsistent formats
+- ❌ Sensitive stack traces expose implementation details in production
+- ❌ Logs are unstructured, making debugging difficult
+- ❌ Inconsistent user-facing messages reduce trust
+
+With centralized error handling:
+- ✅ Every error follows a uniform response format
+- ✅ Sensitive data is redacted in production
+- ✅ Structured logs make debugging and monitoring easier
+- ✅ Consistent, user-friendly error messages build trust
+
+### Implementation Files
+
+#### 1. **Logger Utility** (`src/lib/logger.ts`)
+
+Provides structured logging with JSON formatting:
+
+```typescript
+export const logger = {
+  info: (message: string, meta?: any) => {
+    console.log(JSON.stringify({ level: "info", message, meta, timestamp: new Date() }));
+  },
+  error: (message: string, meta?: any) => {
+    console.error(JSON.stringify({ level: "error", message, meta, timestamp: new Date() }));
+  },
+  warn: (message: string, meta?: any) => {
+    console.warn(JSON.stringify({ level: "warn", message, meta, timestamp: new Date() }));
+  },
+  debug: (message: string, meta?: any) => {
+    if (process.env.NODE_ENV === "development") {
+      console.debug(JSON.stringify({ level: "debug", message, meta, timestamp: new Date() }));
+    }
+  },
+};
+```
+
+**Usage:**
+```typescript
+logger.info("User login successful", { userId: "123", email: "user@example.com" });
+logger.error("Database connection failed", { error: error.message });
+```
+
+#### 2. **Error Handler** (`src/lib/errorHandler.ts`)
+
+Centralized error handler that categorizes errors and provides environment-appropriate responses:
+
+```typescript
+export enum ErrorType {
+  VALIDATION = "VALIDATION_ERROR",
+  AUTHENTICATION = "AUTHENTICATION_ERROR",
+  AUTHORIZATION = "AUTHORIZATION_ERROR",
+  NOT_FOUND = "NOT_FOUND",
+  CONFLICT = "CONFLICT",
+  DATABASE = "DATABASE_ERROR",
+  INTERNAL = "INTERNAL_ERROR",
+}
+
+// Main error handler
+export function handleError(error: any, errorContext: ErrorContext) {
+  const isDev = process.env.NODE_ENV === "development";
+  
+  // Log full details
+  logger.error(`Error in ${context}`, {
+    type,
+    message: errorMessage,
+    stack: isDev ? errorStack : "REDACTED",
+    statusCode,
+  });
+
+  // Return safe response based on environment
+  return NextResponse.json({
+    success: false,
+    message: getUserMessage(type, isDev ? errorMessage : undefined),
+    errorCode: type,
+    ...(isDev && { stack: errorStack }),
+  }, { status: statusCode });
+}
+```
+
+**Convenience Methods:**
+```typescript
+handleDatabaseError(error, "GET /api/users")
+handleValidationError(error, "POST /api/users")
+handleAuthError(error, "POST /api/auth/login")
+handleAuthorizationError(error, "GET /api/admin")
+```
+
+### API Route Integration
+
+All API routes have been updated to use the centralized error handler:
+
+#### Example: `src/app/api/users/route.ts`
+
+```typescript
+import { handleDatabaseError, handleValidationError } from "@/lib/errorHandler";
+import { ZodError } from "zod";
+
+export async function GET(req: NextRequest) {
+  try {
+    const users = await prisma.user.findMany();
+    return sendSuccess(users, "Users retrieved successfully");
+  } catch (error) {
+    return handleDatabaseError(error, "GET /api/users");
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const validatedData = createUserSchema.parse(body);
+    // ... create user
+    return createSuccessResponse("User created successfully", user, 201);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return handleValidationError(error, "POST /api/users");
+    }
+    return handleDatabaseError(error, "POST /api/users");
+  }
+}
+```
+
+**Updated Routes:**
+- ✅ `src/app/api/users/route.ts`
+- ✅ `src/app/api/allocations/route.ts`
+- ✅ `src/app/api/inventory/route.ts`
+- ✅ `src/app/api/organizations/route.ts`
+
+### Error Response Behavior
+
+#### Development Environment
+
+**Request:**
+```bash
+curl -X GET http://localhost:3000/api/users
+```
+
+**Response (with stack trace):**
+```json
+{
+  "success": false,
+  "message": "Database connection failed",
+  "errorCode": "DATABASE_ERROR",
+  "stack": "Error: Database connection failed\n    at async GET (file://...)\n    at async ..."
+}
+```
+
+**Console Log:**
+```json
+{
+  "level": "error",
+  "message": "Error in GET /api/users",
+  "meta": {
+    "type": "DATABASE_ERROR",
+    "message": "Database connection failed",
+    "stack": "Error: Database connection failed\n    at async GET ...",
+    "statusCode": 500
+  },
+  "timestamp": "2025-01-30T10:30:00.000Z"
+}
+```
+
+#### Production Environment
+
+**Request:**
+```bash
+curl -X GET https://api.example.com/users
+```
+
+**Response (sanitized):**
+```json
+{
+  "success": false,
+  "message": "A database error occurred. Please try again later.",
+  "errorCode": "DATABASE_ERROR"
+}
+```
+
+**Console Log (Internal):**
+```json
+{
+  "level": "error",
+  "message": "Error in GET /api/users",
+  "meta": {
+    "type": "DATABASE_ERROR",
+    "message": "Database connection failed",
+    "stack": "REDACTED",
+    "statusCode": 500
+  },
+  "timestamp": "2025-01-30T10:30:00.000Z"
+}
+```
+
+### Error Types and HTTP Status Codes
+
+| Error Type | HTTP Status | User Message (Dev) | User Message (Prod) |
+|------------|-------------|--------------------|---------------------|
+| `VALIDATION_ERROR` | 400 | Actual validation error details | "Invalid request data. Please check your input." |
+| `AUTHENTICATION_ERROR` | 401 | Actual auth error | "Authentication failed. Please try logging in again." |
+| `AUTHORIZATION_ERROR` | 403 | Actual auth error | "You do not have permission to perform this action." |
+| `NOT_FOUND` | 404 | Actual not found message | "The requested resource was not found." |
+| `CONFLICT` | 409 | Actual conflict message | "A conflict occurred. The resource may already exist." |
+| `DATABASE_ERROR` | 500 | Actual database error | "A database error occurred. Please try again later." |
+| `INTERNAL_ERROR` | 500 | Actual error message | "Something went wrong. Please try again later." |
+
+### Structured Logging Format
+
+All logs follow a consistent JSON structure:
+
+```json
+{
+  "level": "info|error|warn|debug",
+  "message": "Human-readable message",
+  "meta": {
+    "key1": "value1",
+    "key2": "value2"
+  },
+  "timestamp": "2025-01-30T10:30:00.000Z"
+}
+```
+
+**Benefits:**
+- 🔍 **Searchable**: Filter logs by level, message, or metadata keys
+- 📊 **Parseable**: Easily processed by log aggregation services (CloudWatch, DataDog, etc.)
+- 🎯 **Contextual**: Includes relevant metadata for debugging
+- ⏰ **Traceable**: Timestamp helps correlate events
+
+### Configuration
+
+**Environment Variables:**
+
+```env
+# Development
+NODE_ENV=development
+
+# Production
+NODE_ENV=production
+```
+
+The error handler automatically adjusts behavior based on `NODE_ENV`:
+- **development**: Shows full stack traces and detailed error messages
+- **production**: Redacts stack traces and shows generic messages
+
+### Debugging Tips
+
+1. **Check Development Logs**: Full error details are shown in development mode
+```bash
+npm run dev
+# Check console output for detailed error messages and stack traces
+```
+
+2. **Monitor Production Logs**: Use structured logging for production debugging
+```bash
+# Example: Query logs for database errors
+cat logs/* | grep -i "DATABASE_ERROR"
+
+# Or with a log aggregation service like CloudWatch
+aws logs filter-log-events --log-group-name /api/errors --filter-pattern "DATABASE_ERROR"
+```
+
+3. **Trace Request Context**: Each error log includes the route context
+```json
+{
+  "message": "Error in GET /api/users",
+  // Makes it easy to see which endpoint failed
+}
+```
+
+### Reflection: Why This Matters
+
+#### Security
+- 🔐 **Protects Implementation Details**: Stack traces and database errors are hidden from users
+- 🔐 **Reduces Attack Surface**: Attackers can't use error messages to discover system structure
+- 🔐 **Builds User Trust**: Users see professional, safe error messages
+
+#### Observability
+- 📊 **Centralized Insights**: One place to see all error patterns
+- 📊 **Easy Debugging**: Structured logs make it trivial to find and fix issues
+- 📊 **Proactive Monitoring**: Can set alerts on error types and rates
+
+#### Extensibility
+- 🔧 **Easy to Extend**: Adding new error types or custom handlers is straightforward
+- 🔧 **Supports Multiple Environments**: Different behavior for dev vs. prod
+- 🔧 **Integration-Ready**: Works with any logging service (File, CloudWatch, DataDog, etc.)
+
+### Summary Table
+
+| Feature | Implementation | Benefit |
+|---------|-----------------|---------|
+| **Centralized Handler** | Single `handleError()` function | Consistency across all routes |
+| **Structured Logging** | JSON logs with metadata | Searchable, filterable logs |
+| **Environment Awareness** | Dev mode shows details, Prod hides them | Security + Debuggability |
+| **Error Categorization** | 7 error types with specific status codes | Clear error semantics |
+| **Validation Handling** | Special handler for Zod errors | Better validation feedback |
+| **Database Errors** | Dedicated handler for database issues | Easy to monitor DB problems |
+
+### Result
+
+✅ **Centralized error handling successfully implemented:**
+- All API routes use the centralized error handler
+- Consistent response format across all endpoints
+- Full stack traces in development, redacted in production
+- Structured JSON logging for all errors
+- User-safe error messages in production
+- Type-safe error categorization with enums
+- Easy to extend with new error types
+- Database errors handled separately for better monitoring
+- Validation errors (Zod) handled with detailed field information
+````

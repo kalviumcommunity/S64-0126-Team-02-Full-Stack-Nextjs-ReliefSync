@@ -1,13 +1,9 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createInventorySchema } from "@/lib/schemas/inventorySchema";
-import {
-  createValidationErrorResponse,
-  createSuccessResponse,
-  createErrorResponse,
-} from "@/lib/validation";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
+import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
+import { sendSuccess } from "@/lib/responseHandler";
+import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 
 /**
  * GET /api/inventory
@@ -46,12 +42,7 @@ export async function GET(req: Request) {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    return sendError(
-      "Failed to retrieve inventory",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
-    );
+    return handleDatabaseError(error, "GET /api/inventory");
   }
 }
 
@@ -103,12 +94,15 @@ export async function POST(req: Request) {
       },
     });
 
-    return createSuccessResponse("Inventory updated successfully", inventory, 201);
+    return createSuccessResponse(
+      "Inventory updated successfully",
+      inventory,
+      201
+    );
   } catch (error) {
     if (error instanceof ZodError) {
-      return createValidationErrorResponse(error);
+      return handleValidationError(error, "POST /api/inventory");
     }
-    console.error("Error creating/updating inventory:", error);
-    return createErrorResponse("Internal server error", 500);
+    return handleDatabaseError(error, "POST /api/inventory");
   }
 }
