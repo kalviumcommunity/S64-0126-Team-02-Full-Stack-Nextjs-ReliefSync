@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 /**
  * GET /api/organizations
@@ -37,23 +38,26 @@ export async function GET(req: Request) {
         take: limit,
         orderBy: { name: "asc" },
       }),
-      prisma.organization.count(where ? { where } : {}),
+      prisma.organization.count(where ? { where } : undefined),
     ]);
 
-    return NextResponse.json({
-      data: organizations,
-      pagination: {
+    return sendSuccess(
+      organizations,
+      "Organizations retrieved successfully",
+      200,
+      {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
-      },
-    });
+      }
+    );
   } catch (error) {
-    console.error("Error fetching organizations:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to retrieve organizations",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -85,9 +89,10 @@ export async function POST(req: Request) {
       !city ||
       !state
     ) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
+      return sendError(
+        "Missing required fields",
+        ERROR_CODES.MISSING_REQUIRED_FIELD,
+        400
       );
     }
 
@@ -95,9 +100,10 @@ export async function POST(req: Request) {
       where: { registrationNo },
     });
     if (existingOrg) {
-      return NextResponse.json(
-        { error: "Organization with this registration number already exists" },
-        { status: 400 }
+      return sendError(
+        "Organization with this registration number already exists",
+        ERROR_CODES.DUPLICATE_ENTRY,
+        400
       );
     }
 
@@ -114,15 +120,13 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(
-      { message: "Organization created successfully", data: organization },
-      { status: 201 }
-    );
+    return sendSuccess(organization, "Organization created successfully", 201);
   } catch (error) {
-    console.error("Error creating organization:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to create organization",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }

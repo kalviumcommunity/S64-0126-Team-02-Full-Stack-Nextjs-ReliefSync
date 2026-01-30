@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 /**
  * GET /api/inventory
@@ -28,23 +29,21 @@ export async function GET(req: Request) {
         take: limit,
         orderBy: { lastUpdated: "desc" },
       }),
-      prisma.inventory.count(where ? { where } : {}),
+      prisma.inventory.count(where ? { where } : undefined),
     ]);
 
-    return NextResponse.json({
-      data: inventories,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+    return sendSuccess(inventories, "Inventory retrieved successfully", 200, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error("Error fetching inventory:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to retrieve inventory",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -60,16 +59,18 @@ export async function POST(req: Request) {
       body;
 
     if (!organizationId || !itemId || quantity === undefined) {
-      return NextResponse.json(
-        { error: "Missing required fields: organizationId, itemId, quantity" },
-        { status: 400 }
+      return sendError(
+        "Missing required fields: organizationId, itemId, quantity",
+        ERROR_CODES.MISSING_REQUIRED_FIELD,
+        400
       );
     }
 
     if (quantity < 0) {
-      return NextResponse.json(
-        { error: "Quantity cannot be negative" },
-        { status: 400 }
+      return sendError(
+        "Quantity cannot be negative",
+        ERROR_CODES.INVALID_INPUT,
+        400
       );
     }
 
@@ -77,9 +78,10 @@ export async function POST(req: Request) {
       where: { id: organizationId },
     });
     if (!org) {
-      return NextResponse.json(
-        { error: "Organization not found" },
-        { status: 404 }
+      return sendError(
+        "Organization not found",
+        ERROR_CODES.ORGANIZATION_NOT_FOUND,
+        404
       );
     }
 
@@ -87,9 +89,10 @@ export async function POST(req: Request) {
       where: { id: itemId },
     });
     if (!item) {
-      return NextResponse.json(
-        { error: "Inventory item not found" },
-        { status: 404 }
+      return sendError(
+        "Inventory item not found",
+        ERROR_CODES.ITEM_NOT_FOUND,
+        404
       );
     }
 
@@ -116,15 +119,13 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(
-      { message: "Inventory updated successfully", data: inventory },
-      { status: 201 }
-    );
+    return sendSuccess(inventory, "Inventory updated successfully", 201);
   } catch (error) {
-    console.error("Error creating/updating inventory:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to create/update inventory",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }

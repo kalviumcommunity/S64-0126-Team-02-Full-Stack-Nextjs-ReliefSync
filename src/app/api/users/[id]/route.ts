@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -13,7 +14,7 @@ export async function GET(req: Request, { params }: Params) {
     const userId = parseInt(id, 10);
 
     if (isNaN(userId)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return sendError("Invalid user ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const user = await prisma.user.findUnique({
@@ -38,15 +39,16 @@ export async function GET(req: Request, { params }: Params) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return sendError("User not found", ERROR_CODES.USER_NOT_FOUND, 404);
     }
 
-    return NextResponse.json({ data: user });
+    return sendSuccess(user, "User retrieved successfully");
   } catch (error) {
-    console.error("Error fetching user:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to retrieve user",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -61,7 +63,7 @@ export async function PUT(req: Request, { params }: Params) {
     const userId = parseInt(id, 10);
 
     if (isNaN(userId)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return sendError("Invalid user ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const body = await req.json();
@@ -72,13 +74,14 @@ export async function PUT(req: Request, { params }: Params) {
     });
 
     if (!existingUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return sendError("User not found", ERROR_CODES.USER_NOT_FOUND, 404);
     }
 
     if (role && !["NGO", "GOVERNMENT"].includes(role)) {
-      return NextResponse.json(
-        { error: "Invalid role. Must be NGO or GOVERNMENT" },
-        { status: 400 }
+      return sendError(
+        "Invalid role. Must be NGO or GOVERNMENT",
+        ERROR_CODES.INVALID_INPUT,
+        400
       );
     }
 
@@ -99,15 +102,13 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
-    return NextResponse.json({
-      message: "User updated successfully",
-      data: updatedUser,
-    });
+    return sendSuccess(updatedUser, "User updated successfully");
   } catch (error) {
-    console.error("Error updating user:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to update user",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -122,7 +123,7 @@ export async function DELETE(req: Request, { params }: Params) {
     const userId = parseInt(id, 10);
 
     if (isNaN(userId)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return sendError("Invalid user ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -130,19 +131,18 @@ export async function DELETE(req: Request, { params }: Params) {
     });
 
     if (!existingUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return sendError("User not found", ERROR_CODES.USER_NOT_FOUND, 404);
     }
 
     await prisma.user.delete({ where: { id: userId } });
 
-    return NextResponse.json({
-      message: "User deleted successfully",
-    });
+    return sendSuccess(null, "User deleted successfully");
   } catch (error) {
-    console.error("Error deleting user:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to delete user",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }

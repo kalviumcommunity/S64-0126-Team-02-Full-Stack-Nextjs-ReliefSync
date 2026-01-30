@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -7,16 +8,13 @@ type Params = { params: Promise<{ id: string }> };
  * GET /api/organizations/:id
  * Retrieves a specific organization by ID
  */
-export async function GET(req: Request, { params }: Params) {
+export async function GET(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
-      return NextResponse.json(
-        { error: "Invalid organization ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const organization = await prisma.organization.findUnique({
@@ -36,18 +34,20 @@ export async function GET(req: Request, { params }: Params) {
     });
 
     if (!organization) {
-      return NextResponse.json(
-        { error: "Organization not found" },
-        { status: 404 }
+      return sendError(
+        "Organization not found",
+        ERROR_CODES.ORGANIZATION_NOT_FOUND,
+        404
       );
     }
 
-    return NextResponse.json({ data: organization });
+    return sendSuccess(organization, "Organization retrieved successfully");
   } catch (error) {
-    console.error("Error fetching organization:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to retrieve organization",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -62,10 +62,7 @@ export async function PUT(req: Request, { params }: Params) {
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
-      return NextResponse.json(
-        { error: "Invalid organization ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const body = await req.json();
@@ -77,9 +74,10 @@ export async function PUT(req: Request, { params }: Params) {
     });
 
     if (!existingOrg) {
-      return NextResponse.json(
-        { error: "Organization not found" },
-        { status: 404 }
+      return sendError(
+        "Organization not found",
+        ERROR_CODES.ORGANIZATION_NOT_FOUND,
+        404
       );
     }
 
@@ -96,15 +94,13 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
-    return NextResponse.json({
-      message: "Organization updated successfully",
-      data: updatedOrg,
-    });
+    return sendSuccess(updatedOrg, "Organization updated successfully");
   } catch (error) {
-    console.error("Error updating organization:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to update organization",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -113,16 +109,13 @@ export async function PUT(req: Request, { params }: Params) {
  * DELETE /api/organizations/:id
  * Deletes an organization by ID
  */
-export async function DELETE(req: Request, { params }: Params) {
+export async function DELETE(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
-      return NextResponse.json(
-        { error: "Invalid organization ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const existingOrg = await prisma.organization.findUnique({
@@ -130,22 +123,22 @@ export async function DELETE(req: Request, { params }: Params) {
     });
 
     if (!existingOrg) {
-      return NextResponse.json(
-        { error: "Organization not found" },
-        { status: 404 }
+      return sendError(
+        "Organization not found",
+        ERROR_CODES.ORGANIZATION_NOT_FOUND,
+        404
       );
     }
 
     await prisma.organization.delete({ where: { id: orgId } });
 
-    return NextResponse.json({
-      message: "Organization deleted successfully",
-    });
+    return sendSuccess(null, "Organization deleted successfully");
   } catch (error) {
-    console.error("Error deleting organization:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to delete organization",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }

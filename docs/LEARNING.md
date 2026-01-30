@@ -572,3 +572,412 @@ Example: `/api/users?page=2&limit=20`
 - Generic error messages without status codes
 
 
+
+## 2.18 
+
+---
+
+## 🌐 Standardized API Response Format
+
+### Why Standardized Responses Matter
+
+Without a standard response format, every endpoint might return different shapes of data — making it hard for frontend developers to handle results or errors predictably. Inconsistent responses increase code complexity and maintenance cost.
+
+### The Unified Response Envelope
+
+We define a common response format that **every endpoint** in our API follows:
+
+#### Success Response Structure
+
+```typescript
+{
+  "success": true,
+  "message": string,
+  "data": any,
+  "timestamp": string,
+  "pagination"?: {
+    "page": number,
+    "limit": number,
+    "total": number,
+    "totalPages": number
+  }
+}
+```
+
+#### Error Response Structure
+
+```typescript
+{
+  "success": false,
+  "message": string,
+  "error": {
+    "code": string,
+    "details"?: any
+  },
+  "timestamp": string
+}
+```
+
+### Benefits
+
+✅ **Consistency** – Every API response follows the same structure  
+✅ **Predictable** – Frontend can handle all responses uniformly  
+✅ **Debuggable** – Error codes and timestamps aid troubleshooting  
+✅ **Observable** – Easy integration with monitoring tools  
+✅ **Type-Safe** – TypeScript interfaces ensure compile-time safety  
+
+---
+
+### Global Response Handler Implementation
+
+We created a centralized response handler in [src/lib/responseHandler.ts](src/lib/responseHandler.ts):
+
+```typescript
+import { NextResponse } from "next/server";
+
+export const sendSuccess = <T = unknown>(
+  data: T,
+  message = "Operation completed successfully",
+  status = 200,
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }
+) => {
+  const response = {
+    success: true,
+    message,
+    data,
+    timestamp: new Date().toISOString(),
+    ...(pagination && { pagination }),
+  };
+
+  return NextResponse.json(response, { status });
+};
+
+export const sendError = (
+  message = "An unexpected error occurred",
+  code = "INTERNAL_ERROR",
+  status = 500,
+  details?: unknown
+) => {
+  const response = {
+    success: false,
+    message,
+    error: {
+      code,
+      ...(details && { details }),
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  console.error(`[API Error] ${code}: ${message}`, details);
+  return NextResponse.json(response, { status });
+};
+```
+
+---
+
+### Standardized Error Codes
+
+We maintain a dictionary of error codes in [src/lib/errorCodes.ts](src/lib/errorCodes.ts) for consistency:
+
+```typescript
+export const ERROR_CODES = {
+  // Validation Errors (4xx)
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
+  INVALID_INPUT: "INVALID_INPUT",
+  INVALID_ID: "INVALID_ID",
+  
+  // Resource Errors (4xx)
+  NOT_FOUND: "NOT_FOUND",
+  ALLOCATION_NOT_FOUND: "ALLOCATION_NOT_FOUND",
+  INVENTORY_NOT_FOUND: "INVENTORY_NOT_FOUND",
+  ORGANIZATION_NOT_FOUND: "ORGANIZATION_NOT_FOUND",
+  USER_NOT_FOUND: "USER_NOT_FOUND",
+  
+  // Business Logic Errors (4xx)
+  INSUFFICIENT_STOCK: "INSUFFICIENT_STOCK",
+  DUPLICATE_ENTRY: "DUPLICATE_ENTRY",
+  INVALID_STATUS_TRANSITION: "INVALID_STATUS_TRANSITION",
+  
+  // Server Errors (5xx)
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+  DATABASE_ERROR: "DATABASE_ERROR",
+  SERVER_ERROR: "SERVER_ERROR",
+} as const;
+```
+
+Using these codes makes it easier to trace issues from logs or monitoring dashboards.
+
+---
+
+### Usage Examples in API Routes
+
+#### Example 1: GET /api/allocations
+
+```typescript
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
+
+export async function GET(req: Request) {
+  try {
+    const allocations = await prisma.allocation.findMany({
+      include: {
+        fromOrg: { select: { id: true, name: true } },
+        toOrg: { select: { id: true, name: true } },
+      },
+      skip,
+      take: limit,
+    });
+
+    return sendSuccess(
+      allocations,
+      "Allocations retrieved successfully",
+      200,
+      { page, limit, total, totalPages }
+    );
+  } catch (error) {
+    return sendError(
+      "Failed to fetch allocations",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
+    );
+  }
+}
+```
+
+#### Example 2: POST /api/allocations
+
+```typescript
+export async function POST(req: Request) {
+  try {
+    const { toOrgId, itemId, quantity } = await req.json();
+
+    if (!toOrgId || !itemId || !quantity) {
+      return sendError(
+        "Missing required fields: toOrgId, itemId, quantity",
+        ERROR_CODES.MISSING_REQUIRED_FIELD,
+        400
+      );
+    }
+
+    if (quantity <= 0) {
+      return sendError(
+        "Quantity must be greater than 0",
+        ERROR_CODES.INVALID_INPUT,
+        400
+      );
+    }
+
+    const allocation = await prisma.allocation.create({
+      data: { toOrgId, itemId, quantity, status: "PENDING" },
+    });
+
+    return sendSuccess(
+      allocation,
+      "Allocation request created successfully",
+      201
+    );
+  } catch (error) {
+    return sendError(
+      "Failed to create allocation",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
+    );
+  }
+}
+```
+
+#### Example 3: GET /api/allocations/:id
+
+```typescript
+export async function GET(req: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const allocationId = parseInt(id, 10);
+
+    if (isNaN(allocationId)) {
+      return sendError(
+        "Invalid allocation ID",
+        ERROR_CODES.INVALID_ID,
+        400
+      );
+    }
+
+    const allocation = await prisma.allocation.findUnique({
+      where: { id: allocationId },
+    });
+
+    if (!allocation) {
+      return sendError(
+        "Allocation not found",
+        ERROR_CODES.ALLOCATION_NOT_FOUND,
+        404
+      );
+    }
+
+    return sendSuccess(allocation, "Allocation retrieved successfully");
+  } catch (error) {
+    return sendError(
+      "Failed to fetch allocation",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
+    );
+  }
+}
+```
+
+---
+
+### Example API Responses
+
+#### ✅ Success Response (List with Pagination)
+
+```json
+{
+  "success": true,
+  "message": "Allocations retrieved successfully",
+  "data": [
+    {
+      "id": 1,
+      "fromOrg": { "id": 2, "name": "Red Cross India" },
+      "toOrg": { "id": 3, "name": "District Relief Center" },
+      "quantity": 100,
+      "status": "APPROVED"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 45,
+    "totalPages": 5
+  },
+  "timestamp": "2026-01-30T10:00:00.000Z"
+}
+```
+
+#### ✅ Success Response (Single Resource)
+
+```json
+{
+  "success": true,
+  "message": "Allocation created successfully",
+  "data": {
+    "id": 12,
+    "toOrgId": 3,
+    "itemId": 5,
+    "quantity": 50,
+    "status": "PENDING",
+    "requestDate": "2026-01-30T10:00:00.000Z"
+  },
+  "timestamp": "2026-01-30T10:00:00.000Z"
+}
+```
+
+#### ❌ Error Response (Validation)
+
+```json
+{
+  "success": false,
+  "message": "Missing required fields: toOrgId, itemId, quantity",
+  "error": {
+    "code": "MISSING_REQUIRED_FIELD"
+  },
+  "timestamp": "2026-01-30T10:00:00.000Z"
+}
+```
+
+#### ❌ Error Response (Not Found)
+
+```json
+{
+  "success": false,
+  "message": "Allocation not found",
+  "error": {
+    "code": "ALLOCATION_NOT_FOUND"
+  },
+  "timestamp": "2026-01-30T10:00:00.000Z"
+}
+```
+
+#### ❌ Error Response (Server Error)
+
+```json
+{
+  "success": false,
+  "message": "Failed to fetch allocations",
+  "error": {
+    "code": "DATABASE_ERROR",
+    "details": {
+      "name": "PrismaClientKnownRequestError",
+      "message": "Connection timeout"
+    }
+  },
+  "timestamp": "2026-01-30T10:00:00.000Z"
+}
+```
+
+---
+
+### API Endpoints Coverage
+
+All API routes now use standardized responses:
+
+| Endpoint | Methods | Handler Used |
+|----------|---------|--------------|
+| `/api/allocations` | GET, POST | ✅ Standardized |
+| `/api/allocations/:id` | GET, PUT, DELETE | ✅ Standardized |
+| `/api/inventory` | GET, POST | ✅ Standardized |
+| `/api/inventory/:id` | GET, PUT, DELETE | ✅ Standardized |
+| `/api/organizations` | GET, POST | ✅ Standardized |
+| `/api/organizations/:id` | GET, PUT, DELETE | ✅ Standardized |
+| `/api/users` | GET, POST | ✅ Standardized |
+| `/api/users/:id` | GET, PUT, DELETE | ✅ Standardized |
+
+---
+
+### Developer Experience Benefits
+
+1. **Faster Debugging** – Every error has a code and timestamp for quick identification
+2. **Reliable Frontend** – All responses share the same schema, reducing conditional logic
+3. **Easy Monitoring** – Integrate with Sentry, Datadog, or custom dashboards effortlessly
+4. **Team Onboarding** – New developers instantly understand the response format
+5. **Type Safety** – TypeScript interfaces prevent response structure mistakes
+
+---
+
+### Observability & Logging
+
+The `sendError` handler automatically logs errors with context:
+
+```typescript
+console.error(`[API Error] ${code}: ${message}`, details);
+```
+
+This enables:
+- Centralized error tracking
+- Performance monitoring
+- Alert configuration for critical errors
+- Debug traces for production issues
+
+---
+
+### Summary
+
+**Standardized API responses** ensure consistency, predictability, and maintainability across the entire application. By using a unified response handler and error codes:
+
+✅ Frontend developers work more efficiently  
+✅ Bugs are easier to trace and fix  
+✅ Monitoring tools integrate seamlessly  
+✅ Code reviews focus on logic, not response formats  
+✅ New team members onboard faster  
+
+**Think of the global response handler as your project's "API voice" — every endpoint speaks in the same tone, no matter who wrote it.**
+

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -7,16 +8,13 @@ type Params = { params: Promise<{ id: string }> };
  * GET /api/inventory/:id
  * Retrieves a specific inventory record by ID
  */
-export async function GET(req: Request, { params }: Params) {
+export async function GET(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const inventoryId = parseInt(id, 10);
 
     if (isNaN(inventoryId)) {
-      return NextResponse.json(
-        { error: "Invalid inventory ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid inventory ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const inventory = await prisma.inventory.findUnique({
@@ -28,18 +26,20 @@ export async function GET(req: Request, { params }: Params) {
     });
 
     if (!inventory) {
-      return NextResponse.json(
-        { error: "Inventory record not found" },
-        { status: 404 }
+      return sendError(
+        "Inventory record not found",
+        ERROR_CODES.INVENTORY_NOT_FOUND,
+        404
       );
     }
 
-    return NextResponse.json({ data: inventory });
+    return sendSuccess(inventory, "Inventory retrieved successfully");
   } catch (error) {
-    console.error("Error fetching inventory:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to retrieve inventory",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -54,10 +54,7 @@ export async function PUT(req: Request, { params }: Params) {
     const inventoryId = parseInt(id, 10);
 
     if (isNaN(inventoryId)) {
-      return NextResponse.json(
-        { error: "Invalid inventory ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid inventory ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const body = await req.json();
@@ -68,16 +65,18 @@ export async function PUT(req: Request, { params }: Params) {
     });
 
     if (!existingInventory) {
-      return NextResponse.json(
-        { error: "Inventory record not found" },
-        { status: 404 }
+      return sendError(
+        "Inventory record not found",
+        ERROR_CODES.INVENTORY_NOT_FOUND,
+        404
       );
     }
 
     if (quantity !== undefined && quantity < 0) {
-      return NextResponse.json(
-        { error: "Quantity cannot be negative" },
-        { status: 400 }
+      return sendError(
+        "Quantity cannot be negative",
+        ERROR_CODES.INVALID_INPUT,
+        400
       );
     }
 
@@ -95,15 +94,13 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
-    return NextResponse.json({
-      message: "Inventory updated successfully",
-      data: updatedInventory,
-    });
+    return sendSuccess(updatedInventory, "Inventory updated successfully");
   } catch (error) {
-    console.error("Error updating inventory:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to update inventory",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -112,16 +109,13 @@ export async function PUT(req: Request, { params }: Params) {
  * DELETE /api/inventory/:id
  * Deletes an inventory record by ID
  */
-export async function DELETE(req: Request, { params }: Params) {
+export async function DELETE(_req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const inventoryId = parseInt(id, 10);
 
     if (isNaN(inventoryId)) {
-      return NextResponse.json(
-        { error: "Invalid inventory ID" },
-        { status: 400 }
-      );
+      return sendError("Invalid inventory ID", ERROR_CODES.INVALID_ID, 400);
     }
 
     const existingInventory = await prisma.inventory.findUnique({
@@ -129,22 +123,22 @@ export async function DELETE(req: Request, { params }: Params) {
     });
 
     if (!existingInventory) {
-      return NextResponse.json(
-        { error: "Inventory record not found" },
-        { status: 404 }
+      return sendError(
+        "Inventory record not found",
+        ERROR_CODES.INVENTORY_NOT_FOUND,
+        404
       );
     }
 
     await prisma.inventory.delete({ where: { id: inventoryId } });
 
-    return NextResponse.json({
-      message: "Inventory record deleted successfully",
-    });
+    return sendSuccess(null, "Inventory record deleted successfully");
   } catch (error) {
-    console.error("Error deleting inventory:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to delete inventory",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 /**
  * GET /api/users
@@ -36,20 +37,18 @@ export async function GET(req: Request) {
       prisma.user.count(where ? { where } : {}),
     ]);
 
-    return NextResponse.json({
-      data: users,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+    return sendSuccess(users, "Users retrieved successfully", 200, {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error("Error fetching users:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to retrieve users",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }
@@ -64,24 +63,27 @@ export async function POST(req: Request) {
     const { email, name, passwordHash, role, organizationId } = body;
 
     if (!email || !name || !passwordHash || !role) {
-      return NextResponse.json(
-        { error: "Missing required fields: email, name, passwordHash, role" },
-        { status: 400 }
+      return sendError(
+        "Missing required fields: email, name, passwordHash, role",
+        ERROR_CODES.MISSING_REQUIRED_FIELD,
+        400
       );
     }
 
     if (!["NGO", "GOVERNMENT"].includes(role)) {
-      return NextResponse.json(
-        { error: "Invalid role. Must be NGO or GOVERNMENT" },
-        { status: 400 }
+      return sendError(
+        "Invalid role. Must be NGO or GOVERNMENT",
+        ERROR_CODES.INVALID_INPUT,
+        400
       );
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return NextResponse.json(
-        { error: "User with this email already exists" },
-        { status: 400 }
+      return sendError(
+        "User with this email already exists",
+        ERROR_CODES.DUPLICATE_ENTRY,
+        400
       );
     }
 
@@ -103,15 +105,13 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(
-      { message: "User created successfully", data: user },
-      { status: 201 }
-    );
+    return sendSuccess(user, "User created successfully", 201);
   } catch (error) {
-    console.error("Error creating user:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return sendError(
+      "Failed to create user",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
     );
   }
 }

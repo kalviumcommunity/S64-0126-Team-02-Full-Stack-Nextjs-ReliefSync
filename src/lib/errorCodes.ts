@@ -1,0 +1,105 @@
+/**
+ * Standardized Error Codes for ReliefSync API
+ *
+ * These error codes provide consistent categorization across all API endpoints,
+ * enabling better debugging, monitoring, and error tracking.
+ *
+ * Error Code Format: CATEGORY_DESCRIPTION
+ */
+
+export const ERROR_CODES = {
+  // Validation Errors (4xx client errors)
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
+  INVALID_INPUT: "INVALID_INPUT",
+  INVALID_ID: "INVALID_ID",
+
+  // Resource Errors (4xx client errors)
+  NOT_FOUND: "NOT_FOUND",
+  RESOURCE_NOT_FOUND: "RESOURCE_NOT_FOUND",
+  ALLOCATION_NOT_FOUND: "ALLOCATION_NOT_FOUND",
+  INVENTORY_NOT_FOUND: "INVENTORY_NOT_FOUND",
+  ORGANIZATION_NOT_FOUND: "ORGANIZATION_NOT_FOUND",
+  USER_NOT_FOUND: "USER_NOT_FOUND",
+  ITEM_NOT_FOUND: "ITEM_NOT_FOUND",
+
+  // Authorization Errors (4xx client errors)
+  UNAUTHORIZED: "UNAUTHORIZED",
+  FORBIDDEN: "FORBIDDEN",
+  INSUFFICIENT_PERMISSIONS: "INSUFFICIENT_PERMISSIONS",
+
+  // Business Logic Errors (4xx client errors)
+  INSUFFICIENT_STOCK: "INSUFFICIENT_STOCK",
+  DUPLICATE_ENTRY: "DUPLICATE_ENTRY",
+  INVALID_STATUS_TRANSITION: "INVALID_STATUS_TRANSITION",
+  ALLOCATION_ALREADY_PROCESSED: "ALLOCATION_ALREADY_PROCESSED",
+
+  // Database Errors (5xx server errors)
+  DATABASE_ERROR: "DATABASE_ERROR",
+  DATABASE_CONNECTION_FAILED: "DATABASE_CONNECTION_FAILED",
+  QUERY_FAILED: "QUERY_FAILED",
+
+  // Server Errors (5xx server errors)
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+  SERVER_ERROR: "SERVER_ERROR",
+  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
+
+  // External Service Errors (5xx server errors)
+  EXTERNAL_API_ERROR: "EXTERNAL_API_ERROR",
+  THIRD_PARTY_SERVICE_FAILED: "THIRD_PARTY_SERVICE_FAILED",
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+/**
+ * Error code to HTTP status code mapping
+ * Provides appropriate HTTP status codes for each error category
+ */
+export const ERROR_STATUS_MAP: Record<string, number> = {
+  // Validation errors
+  [ERROR_CODES.VALIDATION_ERROR]: 400,
+  [ERROR_CODES.MISSING_REQUIRED_FIELD]: 400,
+  [ERROR_CODES.INVALID_INPUT]: 400,
+  [ERROR_CODES.INVALID_ID]: 400,
+
+  // Resource errors
+  [ERROR_CODES.NOT_FOUND]: 404,
+  [ERROR_CODES.RESOURCE_NOT_FOUND]: 404,
+  [ERROR_CODES.ALLOCATION_NOT_FOUND]: 404,
+  [ERROR_CODES.INVENTORY_NOT_FOUND]: 404,
+  [ERROR_CODES.ORGANIZATION_NOT_FOUND]: 404,
+  [ERROR_CODES.USER_NOT_FOUND]: 404,
+  [ERROR_CODES.ITEM_NOT_FOUND]: 404,
+
+  // Authorization errors
+  [ERROR_CODES.UNAUTHORIZED]: 401,
+  [ERROR_CODES.FORBIDDEN]: 403,
+  [ERROR_CODES.INSUFFICIENT_PERMISSIONS]: 403,
+
+  // Business logic errors
+  [ERROR_CODES.INSUFFICIENT_STOCK]: 400,
+  [ERROR_CODES.DUPLICATE_ENTRY]: 409,
+  [ERROR_CODES.INVALID_STATUS_TRANSITION]: 400,
+  [ERROR_CODES.ALLOCATION_ALREADY_PROCESSED]: 409,
+
+  // Database errors
+  [ERROR_CODES.DATABASE_ERROR]: 500,
+  [ERROR_CODES.DATABASE_CONNECTION_FAILED]: 503,
+  [ERROR_CODES.QUERY_FAILED]: 500,
+
+  // Server errors
+  [ERROR_CODES.INTERNAL_ERROR]: 500,
+  [ERROR_CODES.SERVER_ERROR]: 500,
+  [ERROR_CODES.SERVICE_UNAVAILABLE]: 503,
+
+  // External service errors
+  [ERROR_CODES.EXTERNAL_API_ERROR]: 502,
+  [ERROR_CODES.THIRD_PARTY_SERVICE_FAILED]: 502,
+};
+
+/**
+ * Get the appropriate HTTP status code for an error code
+ */
+export const getStatusForErrorCode = (code: string): number => {
+  return ERROR_STATUS_MAP[code] || 500;
+};
