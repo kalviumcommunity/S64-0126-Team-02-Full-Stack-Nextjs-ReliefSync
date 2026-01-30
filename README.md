@@ -1090,3 +1090,355 @@ Current schema version: **v1.0** (Initial setup)
 **Production Ready** with careful deployment practices  
 
 **Result:** Team can confidently evolve database schema together, with reproducible migrations and idempotent seeding.
+
+---
+
+## 2.19 Input Validation with Zod
+
+### Overview
+
+This project uses [Zod](https://zod.dev/) for runtime schema validation on all API endpoints. Zod is a TypeScript-first schema declaration and validation library that ensures all POST and PUT requests receive valid, well-structured data — preventing bad inputs from corrupting the database or crashing the API.
+
+### Why Input Validation Matters
+
+Without validation:
+- Users might send malformed JSON or missing fields
+- The database could receive invalid or unexpected values
+- The application becomes unpredictable or insecure
+
+**Example Problem:**
+```json
+{
+  "name": "",
+  "email": "not-an-email"
+}
+```
+If an API endpoint accepts this data unchecked, you risk broken records and confusing errors later.
+
+---
+
+### Installation
+
+Zod is already installed in this project:
+
+```bash
+npm install zod
+```
+
+---
+
+### Schema Definitions
+
+All validation schemas are located in `src/lib/schemas/`:
+
+#### **User Schema** (`userSchema.ts`)
+
+```typescript
+import { z } from "zod";
+
+export const createUserSchema = z.object({
+  email: z.string().email("Invalid email address").min(5).max(100),
+  name: z.string().min(2, "Name must be at least 2 characters").max(100).trim(),
+  passwordHash: z.string().min(8, "Password hash must be at least 8 characters"),
+  role: z.enum(["NGO", "GOVERNMENT"], {
+    errorMap: () => ({ message: "Role must be either NGO or GOVERNMENT" }),
+  }),
+  organizationId: z.number().int().positive().optional().nullable(),
+});
+
+export const updateUserSchema = z.object({
+  email: z.string().email().min(5).max(100).optional(),
+  name: z.string().min(2).max(100).trim().optional(),
+  passwordHash: z.string().min(8).optional(),
+  role: z.enum(["NGO", "GOVERNMENT"]).optional(),
+  organizationId: z.number().int().positive().optional().nullable(),
+});
+
+// TypeScript types inferred from schemas
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+```
+
+#### **Organization Schema** (`organizationSchema.ts`)
+
+```typescript
+export const createOrganizationSchema = z.object({
+  name: z.string().min(2).max(200).trim(),
+  registrationNo: z.string().min(3).max(50).regex(/^[A-Z0-9-\/]+$/i),
+  contactEmail: z.string().email().max(100),
+  contactPhone: z.string().min(10).max(20).regex(/^[\d\s\-\+\(\)]+$/),
+  address: z.string().min(5).max(500).trim(),
+  city: z.string().min(2).max(100).trim(),
+  state: z.string().min(2).max(100).trim(),
+  country: z.string().min(2).max(100).default("India"),
+  isActive: z.boolean().default(true),
+});
+```
+
+#### **Inventory Schema** (`inventorySchema.ts`)
+
+```typescript
+export const createInventorySchema = z.object({
+  organizationId: z.number().int().positive(),
+  itemId: z.number().int().positive(),
+  quantity: z.number().nonnegative().finite(),
+  minThreshold: z.number().nonnegative().default(0),
+  maxCapacity: z.number().positive().optional().nullable(),
+}).refine(
+  (data) => data.maxCapacity === null || data.maxCapacity === undefined || data.maxCapacity >= data.quantity,
+  { message: "Maximum capacity must be >= current quantity", path: ["maxCapacity"] }
+);
+```
+
+#### **Allocation Schema** (`allocationSchema.ts`)
+
+```typescript
+export const createAllocationSchema = z.object({
+  fromOrgId: z.number().int().positive().optional().nullable(),
+  toOrgId: z.number().int().positive(),
+  itemId: z.number().int().positive(),
+  quantity: z.number().positive(),
+  requestedBy: z.string().min(2).max(100).trim(),
+  notes: z.string().max(1000).optional().nullable(),
+}).refine(
+  (data) => !data.fromOrgId || data.fromOrgId !== data.toOrgId,
+  { message: "Source and recipient organizations must be different", path: ["toOrgId"] }
+);
+```
+
+---
+
+### Validation Helper (`lib/validation.ts`)
+
+A centralized validation utility provides consistent error formatting:
+
+```typescript
+import { NextResponse } from "next/server";
+import { ZodError, ZodSchema } from "zod";
+
+export interface ValidationError {
+  field: string;
+  message: string;
+}
+
+export function formatZodErrors(error: ZodError): ValidationError[] {
+  return error.errors.map((err) => ({
+    field: err.path.join("."),
+    message: err.message,
+  }));
+}
+
+export function createValidationErrorResponse(error: ZodError): NextResponse {
+  return NextResponse.json(
+    {
+      success: false,
+      message: "Validation Error",
+      errors: formatZodErrors(error),
+    },
+    { status: 400 }
+  );
+}
+```
+
+---
+
+### API Handler Implementation
+
+Example: User creation with Zod validation
+
+```typescript
+import { ZodError } from "zod";
+import { createUserSchema } from "@/lib/schemas/userSchema";
+import { createValidationErrorResponse, createSuccessResponse, createErrorResponse } from "@/lib/validation";
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+
+    // Validate request body with Zod
+    const validatedData = createUserSchema.parse(body);
+
+    // Check business rules (e.g., duplicate email)
+    const existingUser = await prisma.user.findUnique({
+      where: { email: validatedData.email },
+    });
+    if (existingUser) {
+      return createErrorResponse("User with this email already exists", 400);
+    }
+
+    // Create user with validated data
+    const user = await prisma.user.create({ data: validatedData });
+
+    return createSuccessResponse("User created successfully", user, 201);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error creating user:", error);
+    return createErrorResponse("Internal server error", 500);
+  }
+}
+```
+
+---
+
+### Validation Examples
+
+#### ✅ Passing Validation
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice Johnson",
+    "email": "alice@example.com",
+    "passwordHash": "hashed_password_123",
+    "role": "NGO"
+  }'
+```
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "User created successfully",
+  "data": {
+    "id": 1,
+    "email": "alice@example.com",
+    "name": "Alice Johnson",
+    "role": "NGO",
+    "organizationId": null,
+    "createdAt": "2026-01-30T12:00:00.000Z"
+  }
+}
+```
+
+#### ❌ Failing Validation
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "A",
+    "email": "invalid-email",
+    "role": "ADMIN"
+  }'
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "success": false,
+  "message": "Validation Error",
+  "errors": [
+    { "field": "name", "message": "Name must be at least 2 characters" },
+    { "field": "email", "message": "Invalid email address" },
+    { "field": "passwordHash", "message": "Required" },
+    { "field": "role", "message": "Role must be either NGO or GOVERNMENT" }
+  ]
+}
+```
+
+---
+
+### Testing Validation
+
+Use these commands to test validation in your local environment:
+
+```bash
+# Test valid user creation
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test User","email":"test@example.com","passwordHash":"password123","role":"NGO"}'
+
+# Test invalid organization (missing required fields)
+curl -X POST http://localhost:3000/api/organizations \
+  -H "Content-Type: application/json" \
+  -d '{"name":"A"}'
+
+# Test invalid inventory (negative quantity)
+curl -X POST http://localhost:3000/api/inventory \
+  -H "Content-Type: application/json" \
+  -d '{"organizationId":1,"itemId":1,"quantity":-5}'
+
+# Test invalid allocation (same source and destination)
+curl -X POST http://localhost:3000/api/allocations \
+  -H "Content-Type: application/json" \
+  -d '{"fromOrgId":1,"toOrgId":1,"itemId":1,"quantity":10,"requestedBy":"admin"}'
+```
+
+---
+
+### Schema Reuse Between Client and Server
+
+A major benefit of Zod is that schemas can be shared between client and server:
+
+```typescript
+// Shared schema file: lib/schemas/userSchema.ts
+import { z } from "zod";
+
+export const createUserSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  // ...
+});
+
+// Type inference for use in components
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+```
+
+**Client-side usage (form validation):**
+```typescript
+import { createUserSchema, CreateUserInput } from "@/lib/schemas/userSchema";
+
+function validateForm(data: unknown): CreateUserInput | null {
+  const result = createUserSchema.safeParse(data);
+  if (result.success) {
+    return result.data;
+  }
+  // Handle validation errors
+  console.log(result.error.errors);
+  return null;
+}
+```
+
+**Server-side usage (API route):**
+```typescript
+import { createUserSchema } from "@/lib/schemas/userSchema";
+
+const validatedData = createUserSchema.parse(body); // Throws on invalid data
+```
+
+---
+
+### Reflection: Why Validation Consistency Matters
+
+1. **Type Safety**: Zod schemas generate TypeScript types, ensuring compile-time and runtime consistency.
+
+2. **Single Source of Truth**: One schema definition validates both client forms and API requests.
+
+3. **Clear Error Messages**: Structured error responses help developers debug and users understand issues.
+
+4. **Business Logic Validation**: Zod's `.refine()` method enables complex cross-field validations.
+
+5. **Team Collaboration**: Shared schemas reduce miscommunication between frontend and backend developers.
+
+6. **Maintainability**: Schema changes automatically update validation logic across the entire application.
+
+---
+
+### Summary
+
+| Feature | Implementation |
+|---------|----------------|
+| Schema Library | Zod |
+| Schema Location | `src/lib/schemas/` |
+| Validation Helper | `src/lib/validation.ts` |
+| Validated Routes | Users, Organizations, Inventory, Allocations |
+| Error Format | `{ success, message, errors[] }` |
+| Type Inference | `z.infer<typeof schema>` |
+| Cross-field Validation | `.refine()` method |
+
+**Result:** All POST and PUT endpoints now validate input data with clear error messages, preventing invalid data from entering the database and providing consistent feedback to API consumers.

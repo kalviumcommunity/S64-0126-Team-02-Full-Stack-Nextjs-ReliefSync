@@ -1,6 +1,18 @@
+<<<<<<< HEAD
 import { prisma } from "@/lib/prisma";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
+=======
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { prisma } from "@/lib/prisma";
+import { updateOrganizationSchema } from "@/lib/schemas/organizationSchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
+>>>>>>> 14c4207 (zod implementation)
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -54,7 +66,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 /**
  * PUT /api/organizations/:id
- * Updates an organization by ID
+ * Updates an organization by ID with Zod validation
  */
 export async function PUT(req: Request, { params }: Params) {
   try {
@@ -62,38 +74,42 @@ export async function PUT(req: Request, { params }: Params) {
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
+<<<<<<< HEAD
       return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
+=======
+      return createErrorResponse("Invalid organization ID", 400);
+>>>>>>> 14c4207 (zod implementation)
     }
 
     const body = await req.json();
-    const { name, contactEmail, contactPhone, address, city, state, isActive } =
-      body;
 
+    // Validate request body with Zod
+    const validatedData = updateOrganizationSchema.parse(body);
+
+    // Check if organization exists
     const existingOrg = await prisma.organization.findUnique({
       where: { id: orgId },
     });
 
     if (!existingOrg) {
+<<<<<<< HEAD
       return sendError(
         "Organization not found",
         ERROR_CODES.ORGANIZATION_NOT_FOUND,
         404
       );
+=======
+      return createErrorResponse("Organization not found", 404);
+>>>>>>> 14c4207 (zod implementation)
     }
 
+    // Update organization
     const updatedOrg = await prisma.organization.update({
       where: { id: orgId },
-      data: {
-        ...(name && { name }),
-        ...(contactEmail && { contactEmail }),
-        ...(contactPhone && { contactPhone }),
-        ...(address && { address }),
-        ...(city && { city }),
-        ...(state && { state }),
-        ...(isActive !== undefined && { isActive }),
-      },
+      data: validatedData,
     });
 
+<<<<<<< HEAD
     return sendSuccess(updatedOrg, "Organization updated successfully");
   } catch (error) {
     return sendError(
@@ -101,7 +117,18 @@ export async function PUT(req: Request, { params }: Params) {
       ERROR_CODES.DATABASE_ERROR,
       500,
       error
+=======
+    return createSuccessResponse(
+      "Organization updated successfully",
+      updatedOrg
+>>>>>>> 14c4207 (zod implementation)
     );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error updating organization:", error);
+    return createErrorResponse("Internal server error", 500);
   }
 }
 

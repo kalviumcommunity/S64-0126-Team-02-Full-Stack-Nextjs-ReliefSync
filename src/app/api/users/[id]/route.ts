@@ -1,6 +1,18 @@
+<<<<<<< HEAD
 import { prisma } from "@/lib/prisma";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
+=======
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { prisma } from "@/lib/prisma";
+import { updateUserSchema } from "@/lib/schemas/userSchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
+>>>>>>> 14c4207 (zod implementation)
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -55,7 +67,7 @@ export async function GET(req: Request, { params }: Params) {
 
 /**
  * PUT /api/users/:id
- * Updates a user by ID
+ * Updates a user by ID with Zod validation
  */
 export async function PUT(req: Request, { params }: Params) {
   try {
@@ -63,17 +75,25 @@ export async function PUT(req: Request, { params }: Params) {
     const userId = parseInt(id, 10);
 
     if (isNaN(userId)) {
+<<<<<<< HEAD
       return sendError("Invalid user ID", ERROR_CODES.INVALID_ID, 400);
+=======
+      return createErrorResponse("Invalid user ID", 400);
+>>>>>>> 14c4207 (zod implementation)
     }
 
     const body = await req.json();
-    const { name, role, organizationId } = body;
 
+    // Validate request body with Zod
+    const validatedData = updateUserSchema.parse(body);
+
+    // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
     });
 
     if (!existingUser) {
+<<<<<<< HEAD
       return sendError("User not found", ERROR_CODES.USER_NOT_FOUND, 404);
     }
 
@@ -83,15 +103,15 @@ export async function PUT(req: Request, { params }: Params) {
         ERROR_CODES.INVALID_INPUT,
         400
       );
+=======
+      return createErrorResponse("User not found", 404);
+>>>>>>> 14c4207 (zod implementation)
     }
 
+    // Update user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: {
-        ...(name && { name }),
-        ...(role && { role }),
-        ...(organizationId !== undefined && { organizationId }),
-      },
+      data: validatedData,
       select: {
         id: true,
         email: true,
@@ -102,6 +122,7 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
+<<<<<<< HEAD
     return sendSuccess(updatedUser, "User updated successfully");
   } catch (error) {
     return sendError(
@@ -110,6 +131,15 @@ export async function PUT(req: Request, { params }: Params) {
       500,
       error
     );
+=======
+    return createSuccessResponse("User updated successfully", updatedUser);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error updating user:", error);
+    return createErrorResponse("Internal server error", 500);
+>>>>>>> 14c4207 (zod implementation)
   }
 }
 

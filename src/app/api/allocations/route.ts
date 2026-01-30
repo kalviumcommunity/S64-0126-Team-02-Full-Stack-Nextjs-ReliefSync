@@ -1,7 +1,13 @@
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { AllocationStatus } from "@prisma/client";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
+import { createAllocationSchema } from "@/lib/schemas/allocationSchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
 
 /**
  * GET /api/allocations
@@ -57,61 +63,42 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/allocations
- * Creates a new allocation request
+ * Creates a new allocation request with Zod validation
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { fromOrgId, toOrgId, itemId, quantity, requestedBy, notes } = body;
 
-    if (!toOrgId || !itemId || !quantity || !requestedBy) {
-      return sendError(
-        "Missing required fields: toOrgId, itemId, quantity, requestedBy",
-        ERROR_CODES.MISSING_REQUIRED_FIELD,
-        400
-      );
-    }
+    // Validate request body with Zod
+    const validatedData = createAllocationSchema.parse(body);
 
-    if (quantity <= 0) {
-      return sendError(
-        "Quantity must be greater than 0",
-        ERROR_CODES.INVALID_INPUT,
-        400
-      );
-    }
-
+    // Check if recipient organization exists
     const toOrg = await prisma.organization.findUnique({
-      where: { id: toOrgId },
+      where: { id: validatedData.toOrgId },
     });
     if (!toOrg) {
-      return sendError(
-        "Recipient organization not found",
-        ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        404
-      );
+      return createErrorResponse("Recipient organization not found", 404);
     }
 
-    if (fromOrgId) {
+    // Check if source organization exists (if provided)
+    if (validatedData.fromOrgId) {
       const fromOrg = await prisma.organization.findUnique({
-        where: { id: fromOrgId },
+        where: { id: validatedData.fromOrgId },
       });
       if (!fromOrg) {
-        return sendError(
-          "Source organization not found",
-          ERROR_CODES.ORGANIZATION_NOT_FOUND,
-          404
-        );
+        return createErrorResponse("Source organization not found", 404);
       }
     }
 
+    // Create allocation
     const allocation = await prisma.allocation.create({
       data: {
-        fromOrgId: fromOrgId || null,
-        toOrgId,
-        itemId,
-        quantity,
-        requestedBy,
-        notes: notes || null,
+        fromOrgId: validatedData.fromOrgId || null,
+        toOrgId: validatedData.toOrgId,
+        itemId: validatedData.itemId,
+        quantity: validatedData.quantity,
+        requestedBy: validatedData.requestedBy,
+        notes: validatedData.notes || null,
         status: "PENDING",
       },
       include: {
@@ -120,17 +107,16 @@ export async function POST(req: Request) {
       },
     });
 
-    return sendSuccess(
-      allocation,
+    return createSuccessResponse(
       "Allocation request created successfully",
+      allocation,
       201
     );
   } catch (error) {
-    return sendError(
-      "Failed to create allocation request",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
-    );
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error creating allocation:", error);
+    return createErrorResponse("Internal server error", 500);
   }
 }

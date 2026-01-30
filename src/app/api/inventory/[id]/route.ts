@@ -1,6 +1,18 @@
+<<<<<<< HEAD
 import { prisma } from "@/lib/prisma";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
+=======
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { prisma } from "@/lib/prisma";
+import { updateInventorySchema } from "@/lib/schemas/inventorySchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
+>>>>>>> 14c4207 (zod implementation)
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,7 +58,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 /**
  * PUT /api/inventory/:id
- * Updates an inventory record by ID
+ * Updates an inventory record by ID with Zod validation
  */
 export async function PUT(req: Request, { params }: Params) {
   try {
@@ -54,17 +66,25 @@ export async function PUT(req: Request, { params }: Params) {
     const inventoryId = parseInt(id, 10);
 
     if (isNaN(inventoryId)) {
+<<<<<<< HEAD
       return sendError("Invalid inventory ID", ERROR_CODES.INVALID_ID, 400);
+=======
+      return createErrorResponse("Invalid inventory ID", 400);
+>>>>>>> 14c4207 (zod implementation)
     }
 
     const body = await req.json();
-    const { quantity, minThreshold, maxCapacity } = body;
 
+    // Validate request body with Zod
+    const validatedData = updateInventorySchema.parse(body);
+
+    // Check if inventory exists
     const existingInventory = await prisma.inventory.findUnique({
       where: { id: inventoryId },
     });
 
     if (!existingInventory) {
+<<<<<<< HEAD
       return sendError(
         "Inventory record not found",
         ERROR_CODES.INVENTORY_NOT_FOUND,
@@ -78,14 +98,16 @@ export async function PUT(req: Request, { params }: Params) {
         ERROR_CODES.INVALID_INPUT,
         400
       );
+=======
+      return createErrorResponse("Inventory record not found", 404);
+>>>>>>> 14c4207 (zod implementation)
     }
 
+    // Update inventory
     const updatedInventory = await prisma.inventory.update({
       where: { id: inventoryId },
       data: {
-        ...(quantity !== undefined && { quantity }),
-        ...(minThreshold !== undefined && { minThreshold }),
-        ...(maxCapacity !== undefined && { maxCapacity }),
+        ...validatedData,
         lastUpdated: new Date(),
       },
       include: {
@@ -94,6 +116,7 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
+<<<<<<< HEAD
     return sendSuccess(updatedInventory, "Inventory updated successfully");
   } catch (error) {
     return sendError(
@@ -101,7 +124,18 @@ export async function PUT(req: Request, { params }: Params) {
       ERROR_CODES.DATABASE_ERROR,
       500,
       error
+=======
+    return createSuccessResponse(
+      "Inventory updated successfully",
+      updatedInventory
+>>>>>>> 14c4207 (zod implementation)
     );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error updating inventory:", error);
+    return createErrorResponse("Internal server error", 500);
   }
 }
 

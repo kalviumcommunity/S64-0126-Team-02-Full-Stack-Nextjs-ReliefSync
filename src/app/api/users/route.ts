@@ -1,6 +1,12 @@
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
+import { createUserSchema } from "@/lib/schemas/userSchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
 
 /**
  * GET /api/users
@@ -55,45 +61,34 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/users
- * Creates a new user
+ * Creates a new user with Zod validation
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, name, passwordHash, role, organizationId } = body;
 
-    if (!email || !name || !passwordHash || !role) {
-      return sendError(
-        "Missing required fields: email, name, passwordHash, role",
-        ERROR_CODES.MISSING_REQUIRED_FIELD,
-        400
-      );
-    }
+    // Validate request body with Zod
+    const validatedData = createUserSchema.parse(body);
 
-    if (!["NGO", "GOVERNMENT"].includes(role)) {
-      return sendError(
-        "Invalid role. Must be NGO or GOVERNMENT",
-        ERROR_CODES.INVALID_INPUT,
-        400
-      );
-    }
-
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: validatedData.email },
+    });
     if (existingUser) {
-      return sendError(
+      return createErrorResponse(
         "User with this email already exists",
-        ERROR_CODES.DUPLICATE_ENTRY,
         400
       );
     }
 
+    // Create new user
     const user = await prisma.user.create({
       data: {
-        email,
-        name,
-        passwordHash,
-        role,
-        organizationId: organizationId || null,
+        email: validatedData.email,
+        name: validatedData.name,
+        passwordHash: validatedData.passwordHash,
+        role: validatedData.role,
+        organizationId: validatedData.organizationId || null,
       },
       select: {
         id: true,
@@ -105,13 +100,12 @@ export async function POST(req: Request) {
       },
     });
 
-    return sendSuccess(user, "User created successfully", 201);
+    return createSuccessResponse("User created successfully", user, 201);
   } catch (error) {
-    return sendError(
-      "Failed to create user",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
-    );
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error creating user:", error);
+    return createErrorResponse("Internal server error", 500);
   }
 }

@@ -1,6 +1,12 @@
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
+import { createInventorySchema } from "@/lib/schemas/inventorySchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
 
 /**
  * GET /api/inventory
@@ -50,82 +56,58 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/inventory
- * Creates or updates an inventory record
+ * Creates or updates an inventory record with Zod validation
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { organizationId, itemId, quantity, minThreshold, maxCapacity } =
-      body;
 
-    if (!organizationId || !itemId || quantity === undefined) {
-      return sendError(
-        "Missing required fields: organizationId, itemId, quantity",
-        ERROR_CODES.MISSING_REQUIRED_FIELD,
-        400
-      );
-    }
+    // Validate request body with Zod
+    const validatedData = createInventorySchema.parse(body);
 
-    if (quantity < 0) {
-      return sendError(
-        "Quantity cannot be negative",
-        ERROR_CODES.INVALID_INPUT,
-        400
-      );
-    }
-
+    // Check if organization exists
     const org = await prisma.organization.findUnique({
-      where: { id: organizationId },
+      where: { id: validatedData.organizationId },
     });
     if (!org) {
-      return sendError(
-        "Organization not found",
-        ERROR_CODES.ORGANIZATION_NOT_FOUND,
-        404
-      );
+      return createErrorResponse("Organization not found", 404);
     }
 
+    // Check if inventory item exists
     const item = await prisma.inventoryItem.findUnique({
-      where: { id: itemId },
+      where: { id: validatedData.itemId },
     });
     if (!item) {
-      return sendError(
-        "Inventory item not found",
-        ERROR_CODES.ITEM_NOT_FOUND,
-        404
-      );
+      return createErrorResponse("Inventory item not found", 404);
     }
 
+    // Upsert inventory record
     const inventory = await prisma.inventory.upsert({
       where: {
-        organizationId_itemId: { organizationId, itemId },
+        organizationId_itemId: {
+          organizationId: validatedData.organizationId,
+          itemId: validatedData.itemId,
+        },
       },
       update: {
-        quantity,
-        ...(minThreshold !== undefined && { minThreshold }),
-        ...(maxCapacity !== undefined && { maxCapacity }),
+        quantity: validatedData.quantity,
+        minThreshold: validatedData.minThreshold,
+        maxCapacity: validatedData.maxCapacity,
         lastUpdated: new Date(),
       },
-      create: {
-        organizationId,
-        itemId,
-        quantity,
-        minThreshold: minThreshold || 0,
-        maxCapacity: maxCapacity || null,
-      },
+      create: validatedData,
       include: {
         organization: { select: { id: true, name: true } },
         item: true,
       },
     });
 
-    return sendSuccess(inventory, "Inventory updated successfully", 201);
+    return createSuccessResponse("Inventory updated successfully", inventory, 201);
   } catch (error) {
-    return sendError(
-      "Failed to create/update inventory",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
-    );
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error creating/updating inventory:", error);
+    return createErrorResponse("Internal server error", 500);
   }
 }

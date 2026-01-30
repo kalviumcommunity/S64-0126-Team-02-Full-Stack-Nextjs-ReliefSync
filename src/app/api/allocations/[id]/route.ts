@@ -1,7 +1,19 @@
+<<<<<<< HEAD
 import { prisma } from "@/lib/prisma";
 import { AllocationStatus } from "@prisma/client";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
+=======
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { prisma } from "@/lib/prisma";
+import { updateAllocationSchema } from "@/lib/schemas/allocationSchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
+>>>>>>> 14c4207 (zod implementation)
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -48,7 +60,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 /**
  * PUT /api/allocations/:id
- * Updates an allocation (status, notes, approver)
+ * Updates an allocation (status, notes, approver) with Zod validation
  */
 export async function PUT(req: Request, { params }: Params) {
   try {
@@ -56,17 +68,25 @@ export async function PUT(req: Request, { params }: Params) {
     const allocationId = parseInt(id, 10);
 
     if (isNaN(allocationId)) {
+<<<<<<< HEAD
       return sendError("Invalid allocation ID", ERROR_CODES.INVALID_ID, 400);
+=======
+      return createErrorResponse("Invalid allocation ID", 400);
+>>>>>>> 14c4207 (zod implementation)
     }
 
     const body = await req.json();
-    const { status, notes, approvedBy } = body;
 
+    // Validate request body with Zod
+    const validatedData = updateAllocationSchema.parse(body);
+
+    // Check if allocation exists
     const existingAllocation = await prisma.allocation.findUnique({
       where: { id: allocationId },
     });
 
     if (!existingAllocation) {
+<<<<<<< HEAD
       return sendError(
         "Allocation not found",
         ERROR_CODES.ALLOCATION_NOT_FOUND,
@@ -85,19 +105,28 @@ export async function PUT(req: Request, { params }: Params) {
 
     if (status && !validStatuses.includes(status)) {
       return sendError("Invalid status value", ERROR_CODES.INVALID_INPUT, 400);
+=======
+      return createErrorResponse("Allocation not found", 404);
+>>>>>>> 14c4207 (zod implementation)
     }
 
+    // Build update data
     const updateData: Record<string, unknown> = {};
-    if (status) updateData.status = status;
-    if (notes !== undefined) updateData.notes = notes;
-    if (approvedBy) {
-      updateData.approvedBy = approvedBy;
-      updateData.approvedDate = new Date();
+    if (validatedData.status) updateData.status = validatedData.status;
+    if (validatedData.notes !== undefined) updateData.notes = validatedData.notes;
+    if (validatedData.approvedBy) {
+      updateData.approvedBy = validatedData.approvedBy;
+      updateData.approvedDate = validatedData.approvedDate
+        ? new Date(validatedData.approvedDate)
+        : new Date();
     }
-    if (status === "COMPLETED") {
-      updateData.completedDate = new Date();
+    if (validatedData.status === "COMPLETED") {
+      updateData.completedDate = validatedData.completedDate
+        ? new Date(validatedData.completedDate)
+        : new Date();
     }
 
+    // Update allocation
     const updatedAllocation = await prisma.allocation.update({
       where: { id: allocationId },
       data: updateData,
@@ -108,6 +137,7 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
+<<<<<<< HEAD
     return sendSuccess(updatedAllocation, "Allocation updated successfully");
   } catch (error) {
     return sendError(
@@ -115,7 +145,18 @@ export async function PUT(req: Request, { params }: Params) {
       ERROR_CODES.DATABASE_ERROR,
       500,
       error
+=======
+    return createSuccessResponse(
+      "Allocation updated successfully",
+      updatedAllocation
+>>>>>>> 14c4207 (zod implementation)
     );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error updating allocation:", error);
+    return createErrorResponse("Internal server error", 500);
   }
 }
 

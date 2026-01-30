@@ -1,6 +1,12 @@
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
+import { createOrganizationSchema } from "@/lib/schemas/organizationSchema";
+import {
+  createValidationErrorResponse,
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/validation";
 
 /**
  * GET /api/organizations
@@ -64,69 +70,41 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/organizations
- * Creates a new organization
+ * Creates a new organization with Zod validation
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const {
-      name,
-      registrationNo,
-      contactEmail,
-      contactPhone,
-      address,
-      city,
-      state,
-      country,
-    } = body;
 
-    if (
-      !name ||
-      !registrationNo ||
-      !contactEmail ||
-      !contactPhone ||
-      !address ||
-      !city ||
-      !state
-    ) {
-      return sendError(
-        "Missing required fields",
-        ERROR_CODES.MISSING_REQUIRED_FIELD,
-        400
-      );
-    }
+    // Validate request body with Zod
+    const validatedData = createOrganizationSchema.parse(body);
 
+    // Check if organization already exists
     const existingOrg = await prisma.organization.findUnique({
-      where: { registrationNo },
+      where: { registrationNo: validatedData.registrationNo },
     });
     if (existingOrg) {
-      return sendError(
+      return createErrorResponse(
         "Organization with this registration number already exists",
-        ERROR_CODES.DUPLICATE_ENTRY,
         400
       );
     }
 
+    // Create new organization
     const organization = await prisma.organization.create({
-      data: {
-        name,
-        registrationNo,
-        contactEmail,
-        contactPhone,
-        address,
-        city,
-        state,
-        country: country || "India",
-      },
+      data: validatedData,
     });
 
-    return sendSuccess(organization, "Organization created successfully", 201);
-  } catch (error) {
-    return sendError(
-      "Failed to create organization",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
+    return createSuccessResponse(
+      "Organization created successfully",
+      organization,
+      201
     );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return createValidationErrorResponse(error);
+    }
+    console.error("Error creating organization:", error);
+    return createErrorResponse("Internal server error", 500);
   }
 }
