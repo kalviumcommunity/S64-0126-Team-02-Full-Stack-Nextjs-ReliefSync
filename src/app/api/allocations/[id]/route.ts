@@ -1,19 +1,9 @@
-<<<<<<< HEAD
-import { prisma } from "@/lib/prisma";
-import { AllocationStatus } from "@prisma/client";
-import { sendSuccess, sendError } from "@/lib/responseHandler";
-import { ERROR_CODES } from "@/lib/errorCodes";
-=======
-import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { updateAllocationSchema } from "@/lib/schemas/allocationSchema";
-import {
-  createValidationErrorResponse,
-  createSuccessResponse,
-  createErrorResponse,
-} from "@/lib/validation";
->>>>>>> 14c4207 (zod implementation)
+import { sendSuccess, sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
+import { createValidationErrorResponse } from "@/lib/validation";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -68,11 +58,7 @@ export async function PUT(req: Request, { params }: Params) {
     const allocationId = parseInt(id, 10);
 
     if (isNaN(allocationId)) {
-<<<<<<< HEAD
       return sendError("Invalid allocation ID", ERROR_CODES.INVALID_ID, 400);
-=======
-      return createErrorResponse("Invalid allocation ID", 400);
->>>>>>> 14c4207 (zod implementation)
     }
 
     const body = await req.json();
@@ -86,28 +72,11 @@ export async function PUT(req: Request, { params }: Params) {
     });
 
     if (!existingAllocation) {
-<<<<<<< HEAD
       return sendError(
         "Allocation not found",
         ERROR_CODES.ALLOCATION_NOT_FOUND,
         404
       );
-    }
-
-    const validStatuses: AllocationStatus[] = [
-      "PENDING",
-      "APPROVED",
-      "IN_TRANSIT",
-      "COMPLETED",
-      "REJECTED",
-      "CANCELLED",
-    ];
-
-    if (status && !validStatuses.includes(status)) {
-      return sendError("Invalid status value", ERROR_CODES.INVALID_INPUT, 400);
-=======
-      return createErrorResponse("Allocation not found", 404);
->>>>>>> 14c4207 (zod implementation)
     }
 
     // Build update data
@@ -137,26 +106,18 @@ export async function PUT(req: Request, { params }: Params) {
       },
     });
 
-<<<<<<< HEAD
     return sendSuccess(updatedAllocation, "Allocation updated successfully");
-  } catch (error) {
-    return sendError(
-      "Failed to update allocation",
-      ERROR_CODES.DATABASE_ERROR,
-      500,
-      error
-=======
-    return createSuccessResponse(
-      "Allocation updated successfully",
-      updatedAllocation
->>>>>>> 14c4207 (zod implementation)
-    );
   } catch (error) {
     if (error instanceof ZodError) {
       return createValidationErrorResponse(error);
     }
     console.error("Error updating allocation:", error);
-    return createErrorResponse("Internal server error", 500);
+    return sendError(
+      "Failed to update allocation",
+      ERROR_CODES.DATABASE_ERROR,
+      500,
+      error
+    );
   }
 }
 

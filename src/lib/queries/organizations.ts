@@ -47,12 +47,12 @@ export async function getOrganizationById(id: number) {
           include: { item: true },
         },
         allocationsFrom: {
-          include: { toOrg: true, item: true },
+          include: { toOrg: true },
           take: 10,
           orderBy: { requestDate: 'desc' },
         },
         allocationsTo: {
-          include: { fromOrg: true, item: true },
+          include: { fromOrg: true },
           take: 10,
           orderBy: { requestDate: 'desc' },
         },

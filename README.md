@@ -1442,3 +1442,435 @@ const validatedData = createUserSchema.parse(body); // Throws on invalid data
 | Cross-field Validation | `.refine()` method |
 
 **Result:** All POST and PUT endpoints now validate input data with clear error messages, preventing invalid data from entering the database and providing consistent feedback to API consumers.
+
+---
+
+## 2.20 Authentication APIs (Signup / Login)
+
+### Overview
+
+This section covers the implementation of secure user authentication using **bcrypt** for password hashing and **JWT (JSON Web Token)** for session management. Authentication is the backbone of secure web applications, ensuring that users are who they claim to be before granting access to protected resources.
+
+---
+
+### Authentication vs Authorization
+
+| Concept | Description | Example |
+|---------|-------------|---------|
+| **Authentication** | Verifying who the user is | User logs in with email and password |
+| **Authorization** | Determining what the user can do | Admin can access `/api/admin`, but regular users cannot |
+
+This implementation focuses on **authentication** — securely verifying user identity.
+
+---
+
+### Authentication Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     SIGNUP FLOW                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  User                    API                    Database         │
+│   │                       │                        │             │
+│   │──── POST /signup ────►│                        │             │
+│   │    {name,email,pass}  │                        │             │
+│   │                       │                        │             │
+│   │                       │──── Check existing ───►│             │
+│   │                       │◄─── User not found ────│             │
+│   │                       │                        │             │
+│   │                       │── Hash password ──┐    │             │
+│   │                       │   (bcrypt 10       │    │             │
+│   │                       │    salt rounds)◄──┘    │             │
+│   │                       │                        │             │
+│   │                       │──── Create user ──────►│             │
+│   │                       │◄─── User created ──────│             │
+│   │                       │                        │             │
+│   │◄── 201 Created ───────│                        │             │
+│   │    {user data}        │                        │             │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      LOGIN FLOW                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  User                    API                    Database         │
+│   │                       │                        │             │
+│   │──── POST /login ─────►│                        │             │
+│   │    {email, password}  │                        │             │
+│   │                       │                        │             │
+│   │                       │──── Find user ────────►│             │
+│   │                       │◄─── User data ─────────│             │
+│   │                       │                        │             │
+│   │                       │── Verify password ─┐   │             │
+│   │                       │   (bcrypt.compare) │   │             │
+│   │                       │◄──────────────────┘   │             │
+│   │                       │                        │             │
+│   │                       │── Generate JWT ───┐    │             │
+│   │                       │   (1 hour expiry) │    │             │
+│   │                       │◄─────────────────┘    │             │
+│   │                       │                        │             │
+│   │◄── 200 OK ────────────│                        │             │
+│   │    {token, user}      │                        │             │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                 PROTECTED ROUTE ACCESS                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  User                    API                                     │
+│   │                       │                                      │
+│   │──── GET /api/users ──►│                                      │
+│   │    Authorization:     │                                      │
+│   │    Bearer <token>     │                                      │
+│   │                       │                                      │
+│   │                       │── Verify JWT ──┐                     │
+│   │                       │                │                     │
+│   │                       │◄──────────────┘                     │
+│   │                       │                                      │
+│   │◄── 200 OK ────────────│  (if valid)                         │
+│   │    {protected data}   │                                      │
+│   │                       │                                      │
+│   │◄── 401/403 Error ─────│  (if invalid/expired)               │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### API Structure
+
+```
+src/
+├── app/
+│   └── api/
+│       ├── auth/
+│       │   ├── signup/
+│       │   │   └── route.ts     # User registration
+│       │   └── login/
+│       │       └── route.ts     # User authentication
+│       └── users/
+│           └── route.ts         # Protected route example
+└── lib/
+    ├── auth.ts                  # JWT utilities
+    └── schemas/
+        └── authSchema.ts        # Zod validation schemas
+```
+
+---
+
+### Signup API
+
+**Endpoint:** `POST /api/auth/signup`
+
+**Description:** Registers a new user with secure password hashing using bcrypt.
+
+**Request Body:**
+```json
+{
+  "name": "Alice Johnson",
+  "email": "alice@example.com",
+  "password": "SecurePass123",
+  "role": "NGO",
+  "organizationId": 1
+}
+```
+
+**Password Requirements:**
+- Minimum 8 characters
+- At least one uppercase letter
+- At least one lowercase letter
+- At least one number
+
+**Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "Signup successful",
+  "data": {
+    "id": 1,
+    "email": "alice@example.com",
+    "name": "Alice Johnson",
+    "role": "NGO",
+    "organizationId": 1,
+    "organization": {
+      "id": 1,
+      "name": "Relief Foundation"
+    },
+    "createdAt": "2026-01-30T10:00:00.000Z"
+  }
+}
+```
+
+**Error Response - User Exists (400):**
+```json
+{
+  "success": false,
+  "message": "User with this email already exists"
+}
+```
+
+**Error Response - Validation Error (400):**
+```json
+{
+  "success": false,
+  "message": "Validation Error",
+  "errors": [
+    {
+      "field": "password",
+      "message": "Password must contain at least one uppercase letter, one lowercase letter, and one number"
+    }
+  ]
+}
+```
+
+---
+
+### Login API
+
+**Endpoint:** `POST /api/auth/login`
+
+**Description:** Authenticates a user and issues a JWT token.
+
+**Request Body:**
+```json
+{
+  "email": "alice@example.com",
+  "password": "SecurePass123"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "user": {
+      "id": 1,
+      "email": "alice@example.com",
+      "name": "Alice Johnson",
+      "role": "NGO",
+      "organizationId": 1,
+      "organization": {
+        "id": 1,
+        "name": "Relief Foundation"
+      }
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expiresIn": "1h"
+  }
+}
+```
+
+**Error Response - User Not Found (404):**
+```json
+{
+  "success": false,
+  "message": "User not found"
+}
+```
+
+**Error Response - Invalid Credentials (401):**
+```json
+{
+  "success": false,
+  "message": "Invalid credentials"
+}
+```
+
+---
+
+### Protected Routes
+
+The `/api/users` endpoint is now protected and requires a valid JWT token.
+
+**Request:**
+```bash
+curl -X GET http://localhost:3000/api/users \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>"
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Users retrieved successfully",
+  "data": [...],
+  "timestamp": "2026-01-30T10:00:00.000Z",
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 5,
+    "totalPages": 1
+  }
+}
+```
+
+**Error Response - Token Missing (401):**
+```json
+{
+  "success": false,
+  "message": "Authentication required. Token missing."
+}
+```
+
+**Error Response - Invalid/Expired Token (403):**
+```json
+{
+  "success": false,
+  "message": "Invalid or expired token"
+}
+```
+
+---
+
+### Password Hashing with bcrypt
+
+Passwords are never stored in plain text. Instead, bcrypt creates a one-way hash:
+
+```typescript
+import bcrypt from "bcryptjs";
+
+// Hashing a password (during signup)
+const saltRounds = 10;
+const hashedPassword = await bcrypt.hash(plainPassword, saltRounds);
+
+// Verifying a password (during login)
+const isValid = await bcrypt.compare(plainPassword, hashedPassword);
+```
+
+**Why bcrypt?**
+- **Salt Rounds:** Each hash includes a unique salt, preventing rainbow table attacks
+- **Slow by Design:** The algorithm is intentionally slow, making brute-force attacks impractical
+- **Industry Standard:** Widely used and battle-tested for password security
+
+---
+
+### JWT Token Generation
+
+JWT tokens encode user identity and are signed with a secret key:
+
+```typescript
+import jwt from "jsonwebtoken";
+
+const token = jwt.sign(
+  { id: user.id, email: user.email, role: user.role },
+  JWT_SECRET,
+  { expiresIn: "1h" }
+);
+```
+
+**Token Structure:**
+```
+Header.Payload.Signature
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.  <- Header (algorithm)
+eyJpZCI6MSwiZW1haWwiOiJhbGljZUBleGFt...  <- Payload (user data)
+SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV...    <- Signature (verification)
+```
+
+---
+
+### Testing the APIs
+
+**1. Signup Request:**
+```bash
+curl -X POST http://localhost:3000/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice Johnson",
+    "email": "alice@example.com",
+    "password": "SecurePass123",
+    "role": "NGO"
+  }'
+```
+
+**2. Login Request:**
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@example.com",
+    "password": "SecurePass123"
+  }'
+```
+
+**3. Access Protected Route:**
+```bash
+curl -X GET http://localhost:3000/api/users \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+---
+
+### Security Considerations
+
+#### Token Expiry
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Access Token Expiry | 1 hour | Limits exposure if token is compromised |
+| Refresh Strategy | Re-login required | Simple and secure for current scope |
+
+#### Token Storage Options
+
+| Method | Pros | Cons | Recommendation |
+|--------|------|------|----------------|
+| **localStorage** | Easy to implement, persists across tabs | Vulnerable to XSS attacks | ❌ Not recommended for sensitive apps |
+| **sessionStorage** | Cleared on tab close | Still vulnerable to XSS | ⚠️ Use with caution |
+| **HttpOnly Cookie** | Not accessible via JS, immune to XSS | Requires CSRF protection | ✅ Recommended for production |
+| **Memory (React State)** | Most secure, no persistence | Lost on page refresh | ✅ Best for high-security apps |
+
+#### Environment Variables
+
+```env
+# .env.local
+JWT_SECRET=your-super-secret-key-minimum-32-characters
+```
+
+**Important:** Never commit secrets to version control. Use environment variables in production.
+
+---
+
+### Reflection: Authentication Best Practices
+
+1. **Password Security:**
+   - Never store plain-text passwords
+   - Use bcrypt with adequate salt rounds (10+)
+   - Enforce strong password policies
+
+2. **Token Management:**
+   - Use short expiry times for access tokens
+   - Consider refresh tokens for long-lived sessions
+   - Invalidate tokens on logout (requires server-side tracking)
+
+3. **Transport Security:**
+   - Always use HTTPS in production
+   - Set secure cookie flags when using cookies
+
+4. **Error Messages:**
+   - Be vague in error responses to prevent user enumeration
+   - Consider using generic "Invalid credentials" for both wrong email and password
+
+5. **Rate Limiting:**
+   - Implement rate limiting on auth endpoints
+   - Prevent brute-force attacks
+
+---
+
+### Summary
+
+| Feature | Implementation |
+|---------|----------------|
+| Password Hashing | bcrypt (10 salt rounds) |
+| Token Type | JWT |
+| Token Expiry | 1 hour |
+| Auth Routes | `/api/auth/signup`, `/api/auth/login` |
+| Protected Route | `/api/users` (GET) |
+| Schema Validation | Zod |
+| Auth Helper | `src/lib/auth.ts` |
+
+**Result:** The application now has fully functional Signup and Login APIs with secure password hashing, JWT-based authentication, and protected routes that validate tokens before granting access.
