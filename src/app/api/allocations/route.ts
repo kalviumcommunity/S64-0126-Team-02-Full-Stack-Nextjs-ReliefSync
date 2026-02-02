@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
+import redis from "@/lib/redis";
 import { AllocationStatus } from "@prisma/client";
 import { createAllocationSchema } from "@/lib/schemas/allocationSchema";
 import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
@@ -19,6 +20,22 @@ export async function GET(req: Request) {
     const toOrgId = searchParams.get("toOrgId");
     const fromOrgId = searchParams.get("fromOrgId");
     const skip = (page - 1) * limit;
+
+    // Create cache key based on query parameters
+    const cacheKey = `allocations:list:${page}:${limit}:${status || "all"}:${toOrgId || "all"}:${fromOrgId || "all"}`;
+
+    // Check Redis cache first (Cache-Aside Pattern)
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log(`✅ Cache Hit: ${cacheKey}`);
+      return sendSuccess(
+        JSON.parse(cachedData),
+        "Allocations retrieved successfully (from cache)",
+        200
+      );
+    }
+
+    console.log(`⚠️ Cache Miss: ${cacheKey} - Fetching from database`);
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
@@ -42,12 +59,27 @@ export async function GET(req: Request) {
       prisma.allocation.count(whereClause ? { where: whereClause } : undefined),
     ]);
 
-    return sendSuccess(allocations, "Allocations retrieved successfully", 200, {
+    const responseData = allocations;
+    const pagination = {
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit),
-    });
+    };
+
+    // Cache the response for 3 minutes (180 seconds) - allocations change more frequently
+    await redis.setex(
+      cacheKey,
+      180,
+      JSON.stringify({ data: responseData, pagination })
+    );
+
+    return sendSuccess(
+      responseData,
+      "Allocations retrieved successfully",
+      200,
+      pagination
+    );
   } catch (error) {
     return handleDatabaseError(error, "GET /api/allocations");
   }
@@ -98,6 +130,15 @@ export async function POST(req: Request) {
         toOrg: { select: { id: true, name: true } },
       },
     });
+
+    // Invalidate cache after creating new allocation
+    const keys = await redis.keys("allocations:list:*");
+    if (keys.length > 0) {
+      await redis.del(...keys);
+      console.log(
+        `🗑️ Cache Invalidated: Cleared ${keys.length} allocation list caches`
+      );
+    }
 
     return createSuccessResponse(
       "Allocation request created successfully",

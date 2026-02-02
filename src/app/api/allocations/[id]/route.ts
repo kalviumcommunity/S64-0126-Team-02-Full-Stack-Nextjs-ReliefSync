@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
+import redis from "@/lib/redis";
 import { updateAllocationSchema } from "@/lib/schemas/allocationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
@@ -20,6 +21,21 @@ export async function GET(_req: Request, { params }: Params) {
       return sendError("Invalid allocation ID", ERROR_CODES.INVALID_ID, 400);
     }
 
+    // Create cache key for specific allocation
+    const cacheKey = `allocation:${allocationId}`;
+
+    // Check Redis cache first
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log(`✅ Cache Hit: ${cacheKey}`);
+      return sendSuccess(
+        JSON.parse(cachedData),
+        "Allocation retrieved successfully (from cache)"
+      );
+    }
+
+    console.log(`⚠️ Cache Miss: ${cacheKey} - Fetching from database`);
+
     const allocation = await prisma.allocation.findUnique({
       where: { id: allocationId },
       include: {
@@ -36,6 +52,9 @@ export async function GET(_req: Request, { params }: Params) {
         404
       );
     }
+
+    // Cache allocation data for 5 minutes (300 seconds)
+    await redis.setex(cacheKey, 300, JSON.stringify(allocation));
 
     return sendSuccess(allocation, "Allocation retrieved successfully");
   } catch (error) {
@@ -82,7 +101,8 @@ export async function PUT(req: Request, { params }: Params) {
     // Build update data
     const updateData: Record<string, unknown> = {};
     if (validatedData.status) updateData.status = validatedData.status;
-    if (validatedData.notes !== undefined) updateData.notes = validatedData.notes;
+    if (validatedData.notes !== undefined)
+      updateData.notes = validatedData.notes;
     if (validatedData.approvedBy) {
       updateData.approvedBy = validatedData.approvedBy;
       updateData.approvedDate = validatedData.approvedDate
@@ -105,6 +125,16 @@ export async function PUT(req: Request, { params }: Params) {
         approver: { select: { id: true, name: true } },
       },
     });
+
+    // Invalidate caches after update
+    await redis.del(`allocation:${allocationId}`); // Invalidate specific allocation cache
+    const keys = await redis.keys("allocations:list:*"); // Invalidate all list caches
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    console.log(
+      `🗑️ Cache Invalidated: allocation:${allocationId} and allocations:list:* patterns`
+    );
 
     return sendSuccess(updatedAllocation, "Allocation updated successfully");
   } catch (error) {
@@ -147,6 +177,16 @@ export async function DELETE(_req: Request, { params }: Params) {
     }
 
     await prisma.allocation.delete({ where: { id: allocationId } });
+
+    // Invalidate caches after deletion
+    await redis.del(`allocation:${allocationId}`); // Invalidate specific allocation cache
+    const keys = await redis.keys("allocations:list:*"); // Invalidate all list caches
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    console.log(
+      `🗑️ Cache Invalidated: allocation:${allocationId} and allocations:list:* patterns`
+    );
 
     return sendSuccess({ id: allocationId }, "Allocation deleted successfully");
   } catch (error) {
