@@ -5,17 +5,20 @@ import { verifyToken, extractToken, type DecodedToken } from "@/lib/auth";
 /**
  * Authorization Middleware
  * Validates JWT tokens and enforces role-based access control (RBAC)
- * across protected API routes.
+ * across protected API routes and pages.
  *
  * This middleware intercepts all incoming requests and:
- * 1. Extracts and validates JWT tokens from Authorization headers
+ * 1. Extracts and validates JWT tokens from cookies
  * 2. Checks user roles against route requirements
- * 3. Denies access to unauthorized users
+ * 3. Denies access to unauthorized users and redirects to login
  * 4. Passes validated user info to downstream handlers via custom headers
  */
 
-// Routes that require authentication
-const PROTECTED_ROUTES = ["/api/users", "/api/allocations", "/api/inventory", "/api/organizations"];
+// Page routes that require authentication
+const PROTECTED_PAGE_ROUTES = ["/dashboard", "/requests"];
+
+// API routes that require authentication
+const PROTECTED_API_ROUTES = ["/api/users", "/api/allocations", "/api/inventory", "/api/organizations"];
 
 // Routes that require specific roles (role => required roles)
 const ROLE_BASED_ROUTES: Record<string, string[]> = {
@@ -28,23 +31,31 @@ const ROLE_BASED_ROUTES: Record<string, string[]> = {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Check if route is protected (requires authentication)
-  const isProtectedRoute = PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
+  // Check if route is a protected page
+  const isProtectedPage = PROTECTED_PAGE_ROUTES.some((route) => pathname.startsWith(route));
+
+  // Check if route is a protected API route
+  const isProtectedAPI = PROTECTED_API_ROUTES.some((route) => pathname.startsWith(route));
 
   // Check if route requires specific roles
   const requiredRoles = ROLE_BASED_ROUTES[pathname] || null;
 
   // Skip middleware for non-protected routes
-  if (!isProtectedRoute && !requiredRoles) {
+  if (!isProtectedPage && !isProtectedAPI && !requiredRoles) {
     return NextResponse.next();
   }
 
-  // Extract token from Authorization header
-  const authHeader = req.headers.get("authorization");
-  const token = extractToken(authHeader);
+  // Extract token from cookie or Authorization header
+  const token = req.cookies.get("auth-token")?.value || 
+                extractToken(req.headers.get("authorization"));
 
   // No token provided
   if (!token) {
+    // For page routes, redirect to login
+    if (isProtectedPage) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+    // For API routes, return JSON error
     return NextResponse.json(
       {
         success: false,
@@ -59,6 +70,11 @@ export function middleware(req: NextRequest) {
   const decoded = verifyToken(token) as DecodedToken | null;
 
   if (!decoded) {
+    // For page routes, redirect to login
+    if (isProtectedPage) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+    // For API routes, return JSON error
     return NextResponse.json(
       {
         success: false,
@@ -100,6 +116,9 @@ export function middleware(req: NextRequest) {
  */
 export const config = {
   matcher: [
+    // Protect page routes
+    "/dashboard/:path*",
+    "/requests/:path*",
     // Protect all API routes except auth (login/signup)
     "/api/:path*",
     // Exclude auth routes
