@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
+import redis from "@/lib/redis";
 import { updateOrganizationSchema } from "@/lib/schemas/organizationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
@@ -19,6 +20,21 @@ export async function GET(_req: Request, { params }: Params) {
     if (isNaN(orgId)) {
       return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
     }
+
+    // Create cache key for specific organization
+    const cacheKey = `organization:${orgId}`;
+
+    // Check Redis cache first
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log(`✅ Cache Hit: ${cacheKey}`);
+      return sendSuccess(
+        JSON.parse(cachedData),
+        "Organization retrieved successfully (from cache)"
+      );
+    }
+
+    console.log(`⚠️ Cache Miss: ${cacheKey} - Fetching from database`);
 
     const organization = await prisma.organization.findUnique({
       where: { id: orgId },
@@ -43,6 +59,9 @@ export async function GET(_req: Request, { params }: Params) {
         404
       );
     }
+
+    // Cache organization data for 10 minutes (600 seconds)
+    await redis.setex(cacheKey, 600, JSON.stringify(organization));
 
     return sendSuccess(organization, "Organization retrieved successfully");
   } catch (error) {
@@ -92,6 +111,16 @@ export async function PUT(req: Request, { params }: Params) {
       data: validatedData,
     });
 
+    // Invalidate caches after update
+    await redis.del(`organization:${orgId}`); // Invalidate specific organization cache
+    const keys = await redis.keys("organizations:list:*"); // Invalidate all list caches
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    console.log(
+      `🗑️ Cache Invalidated: organization:${orgId} and organizations:list:* patterns`
+    );
+
     return sendSuccess(updatedOrg, "Organization updated successfully");
   } catch (error) {
     if (error instanceof ZodError) {
@@ -133,6 +162,16 @@ export async function DELETE(_req: Request, { params }: Params) {
     }
 
     await prisma.organization.delete({ where: { id: orgId } });
+
+    // Invalidate caches after deletion
+    await redis.del(`organization:${orgId}`); // Invalidate specific organization cache
+    const keys = await redis.keys("organizations:list:*"); // Invalidate all list caches
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    console.log(
+      `🗑️ Cache Invalidated: organization:${orgId} and organizations:list:* patterns`
+    );
 
     return sendSuccess(null, "Organization deleted successfully");
   } catch (error) {

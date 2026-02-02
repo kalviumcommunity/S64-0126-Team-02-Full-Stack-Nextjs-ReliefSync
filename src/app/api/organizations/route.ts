@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
+import redis from "@/lib/redis";
 import { createOrganizationSchema } from "@/lib/schemas/organizationSchema";
 import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
 import { sendSuccess } from "@/lib/responseHandler";
@@ -16,6 +17,22 @@ export async function GET(req: Request) {
     const limit = Number(searchParams.get("limit")) || 10;
     const isActive = searchParams.get("isActive");
     const skip = (page - 1) * limit;
+
+    // Create cache key based on query parameters
+    const cacheKey = `organizations:list:${page}:${limit}:${isActive || "all"}`;
+
+    // Check Redis cache first (Cache-Aside Pattern)
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log(`✅ Cache Hit: ${cacheKey}`);
+      return sendSuccess(
+        JSON.parse(cachedData),
+        "Organizations retrieved successfully (from cache)",
+        200
+      );
+    }
+
+    console.log(`⚠️ Cache Miss: ${cacheKey} - Fetching from database`);
 
     const where =
       isActive !== null ? { isActive: isActive === "true" } : undefined;
@@ -44,16 +61,26 @@ export async function GET(req: Request) {
       prisma.organization.count(where ? { where } : undefined),
     ]);
 
+    const responseData = organizations;
+    const pagination = {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    };
+
+    // Cache the response for 5 minutes (300 seconds)
+    await redis.setex(
+      cacheKey,
+      300,
+      JSON.stringify({ data: responseData, pagination })
+    );
+
     return sendSuccess(
-      organizations,
+      responseData,
       "Organizations retrieved successfully",
       200,
-      {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      }
+      pagination
     );
   } catch (error) {
     return handleDatabaseError(error, "GET /api/organizations");
@@ -86,6 +113,15 @@ export async function POST(req: Request) {
     const organization = await prisma.organization.create({
       data: validatedData,
     });
+
+    // Invalidate cache after creating new organization
+    const keys = await redis.keys("organizations:list:*");
+    if (keys.length > 0) {
+      await redis.del(...keys);
+      console.log(
+        `🗑️ Cache Invalidated: Cleared ${keys.length} organization list caches`
+      );
+    }
 
     return createSuccessResponse(
       "Organization created successfully",

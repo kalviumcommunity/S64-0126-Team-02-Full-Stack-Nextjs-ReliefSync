@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
+import redis from "@/lib/redis";
 import { createUserSchema } from "@/lib/schemas/userSchema";
 import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
 import { sendSuccess } from "@/lib/responseHandler";
@@ -31,6 +32,22 @@ export async function GET(req: NextRequest) {
     const role = searchParams.get("role");
     const skip = (page - 1) * limit;
 
+    // Create cache key based on query parameters
+    const cacheKey = `users:list:${page}:${limit}:${role || "all"}`;
+
+    // Check Redis cache first (Cache-Aside Pattern)
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log(`✅ Cache Hit: ${cacheKey}`);
+      return sendSuccess(
+        JSON.parse(cachedData),
+        "Users retrieved successfully (from cache)",
+        200
+      );
+    }
+
+    console.log(`⚠️ Cache Miss: ${cacheKey} - Fetching from database`);
+
     const where = role ? { role: role as "NGO" | "GOVERNMENT" } : undefined;
 
     const [users, total] = await Promise.all([
@@ -54,12 +71,27 @@ export async function GET(req: NextRequest) {
       prisma.user.count(where ? { where } : undefined),
     ]);
 
-    return sendSuccess(users, "Users retrieved successfully", 200, {
+    const responseData = users;
+    const pagination = {
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit),
-    });
+    };
+
+    // Cache the response for 5 minutes (300 seconds)
+    await redis.setex(
+      cacheKey,
+      300,
+      JSON.stringify({ data: responseData, pagination })
+    );
+
+    return sendSuccess(
+      responseData,
+      "Users retrieved successfully",
+      200,
+      pagination
+    );
   } catch (error) {
     return handleDatabaseError(error, "GET /api/users");
   }
@@ -105,6 +137,16 @@ export async function POST(req: NextRequest) {
         createdAt: true,
       },
     });
+
+    // Invalidate cache after creating new user
+    // Clear all user list caches to ensure fresh data
+    const keys = await redis.keys("users:list:*");
+    if (keys.length > 0) {
+      await redis.del(...keys);
+      console.log(
+        `🗑️ Cache Invalidated: Cleared ${keys.length} user list caches`
+      );
+    }
 
     return createSuccessResponse("User created successfully", user, 201);
   } catch (error) {
