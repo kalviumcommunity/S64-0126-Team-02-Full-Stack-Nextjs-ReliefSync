@@ -1401,4 +1401,29 @@ curl -X GET http://localhost:3000/api/users
 
 **Remember:** *"Cache is like a short-term memory — it makes things fast, but only if you remember to forget at the right time."*
 
+---
+
+### 11. Responsive Tailwind + Theme System
+
+#### Tailwind Configuration Summary
+- `darkMode: 'class'` centralizes all `dark:` variants so a single toggle manages the theme state instead of scattered inline styling.
+- The brand palette lives in `theme.extend.colors.brand` (light / DEFAULT / dark) to keep accent colors consistent between the hero, cards, and focus states.
+- Explicit breakpoints (`sm` through `xl`) guarantee that base spacing, typography scaling, and grid behavior mirror the documented design system while keeping Tailwind defaults intact (thanks to `...defaultTheme.screens`).
+- The `content` array covers `src`, `app`, `components`, and docs so Tailwind only emits the utilities we actually use.
+
+#### Responsiveness Evidence
+- The hero’s padding (`px-4 md:px-10 lg:px-12 xl:px-16`), headings (`text-4xl md:text-5xl lg:text-6xl`), and metrics grid (`sm:grid-cols-3`) all respond as expected to the defined breakpoints.
+- Auth + operational cards transition cleanly into a two-column layout via `lg:grid-cols-[1.1fr,0.9fr]` and maintain consistent spacing with responsive padding (`p-6 sm:p-8`).
+- Feature cards use `md:grid-cols-3` so they stack vertically on phones and align to columns on tablets/desktops.
+- Placeholder screenshots capture the layout proportions for each width category:
+  - [docs/screenshots/responsive-mobile.png](docs/screenshots/responsive-mobile.png)
+  - [docs/screenshots/responsive-tablet.png](docs/screenshots/responsive-tablet.png)
+  - [docs/screenshots/responsive-desktop.png](docs/screenshots/responsive-desktop.png)
+
+#### Theme Reflection
+- `UIContext` seeds the theme from `localStorage` (or `prefers-color-scheme`), toggles the `dark` class on `<html>`, and saves future choices so the preference survives reloads.
+- The header exposes a rounded toggle that swaps sun/moon icons, mirrors the current theme in the indicator text, and leans on Tailwind `dark:` classes for the border and text colors.
+- Cards, inputs, and text pair light/dark surfaces (`bg-white / dark:bg-slate-900`, `text-slate-900 / dark:text-white`) to preserve WCAG AA contrast ratios even when the global theme flips.
+- Focus states rely on `focus:ring` utilities built directly into the button and input utilities to keep keyboard navigation visible in both themes.
+
 ````
