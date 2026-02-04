@@ -37,16 +37,244 @@ This structure ensures separation of concerns and supports scalability in future
 
 ## Setup Instructions
 
-Install dependencies:
-```
+### 1. Install Dependencies
+```bash
 npm install
 ```
 
-Run locally:
+### 2. Configure Environment Variables
+
+Before running the application, you must set up your environment variables. See the **Environment Variables** section below for detailed instructions.
+
+Quick setup:
+```bash
+# Copy the example file
+cp .env.example .env.local
+
+# Edit .env.local with your actual values
 ```
+
+### 3. Run Locally
+```bash
 npm run dev
 ```
 The application runs at ```http://localhost:3000```
+
+---
+
+## 🔐 Environment Variables
+
+This project uses Next.js environment variable management to safely handle configuration and secrets. Understanding how to properly configure these variables is critical for security and functionality.
+
+---
+
+### 📋 Required Environment Variables
+
+All environment variables are documented in [.env.example](.env.example). Below is a comprehensive list:
+
+#### **Server-Side Variables** (Private - Never Exposed to Client)
+
+| Variable | Type | Description | Example | Security Level |
+|----------|------|-------------|---------|----------------|
+| `DATABASE_URL` | String | PostgreSQL connection string | `postgresql://user:pass@localhost:5432/db` | 🔴 **CRITICAL** |
+| `JWT_SECRET` | String | Secret key for JWT token signing | `your-secret-min-32-chars` | 🔴 **CRITICAL** |
+| `REDIS_URL` | String | Redis connection string for caching | `redis://localhost:6379` | 🟡 **HIGH** |
+| `APP_NAME` | String | Application name for cache prefixes | `ReliefSync` | 🟢 **LOW** |
+| `NODE_ENV` | String | Runtime environment | `development`, `production`, `test` | 🟢 **LOW** |
+
+#### **Client-Side Variables** (Public - Embedded in Browser Bundle)
+
+These variables are prefixed with `NEXT_PUBLIC_` and are accessible in both server and client code.
+
+| Variable | Type | Description | Example | Notes |
+|----------|------|-------------|---------|-------|
+| `NEXT_PUBLIC_API_BASE_URL` | String | API base URL (if needed) | `http://localhost:3000/api` | ⚠️ Optional |
+| `NEXT_PUBLIC_APP_NAME` | String | Public app name for branding | `ReliefSync` | ⚠️ Optional |
+
+> **⚠️ WARNING**: Never put secrets in `NEXT_PUBLIC_` variables! They are embedded in the client bundle and visible to anyone.
+
+---
+
+### 🔒 Security Best Practices
+
+#### 1. **Server-Only vs. Client-Accessible Variables**
+
+**Server-Only Variables** (accessed via `process.env`):
+- Only available in server-side code (API routes, `getServerSideProps`, etc.)
+- Never sent to the browser
+- Perfect for database credentials, API keys, JWT secrets
+
+```typescript
+// ✅ CORRECT: Server-side only (e.g., in /src/lib/auth.ts)
+const JWT_SECRET = process.env.JWT_SECRET || "fallback";
+```
+
+**Client-Accessible Variables** (prefixed with `NEXT_PUBLIC_`):
+- Embedded in the browser bundle at build time
+- Accessible in both server and client code
+- Only use for non-sensitive configuration
+
+```typescript
+// ✅ CORRECT: Public variable for client-side use
+const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+```
+
+```typescript
+// ❌ WRONG: Never expose secrets with NEXT_PUBLIC_
+const secret = process.env.NEXT_PUBLIC_JWT_SECRET; // DON'T DO THIS!
+```
+
+#### 2. **Git Protection Strategy**
+
+Our `.gitignore` is configured to prevent accidental commits:
+
+```gitignore
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+```
+
+This pattern:
+- ✅ Ignores all `.env` files (`.env.local`, `.env.production`, etc.)
+- ✅ Allows `.env.example` to be committed as a template
+- ✅ Prevents accidental exposure of secrets
+
+#### 3. **Multi-Layer Protection**
+
+We implement defense-in-depth with multiple security layers:
+
+| Layer | Protection Mechanism | Purpose |
+|-------|---------------------|---------|
+| **Layer 1** | `.gitignore` rules | Prevents Git from tracking `.env.local` |
+| **Layer 2** | `.env.example` template | Documents required variables without exposing values |
+| **Layer 3** | Next.js scoping | Server variables (`process.env`) never reach the client |
+| **Layer 4** | Code reviews | PR checklist includes environment variable security checks |
+| **Layer 5** | Environment validation | Runtime checks ensure required variables are set |
+
+---
+
+### 🛡️ How We Prevent Accidental Leaks
+
+#### Scenario: "What if a teammate accidentally pushes .env.local to GitHub?"
+
+**Our Multi-Layer Defense:**
+
+1. **Prevention (Layer 1 - `.gitignore`)**:
+   - `.env.local` is explicitly ignored
+   - Git won't track or stage this file
+   - Even `git add -A` won't include it
+
+2. **Detection (Layer 2 - Pre-commit Hooks)** (Optional - Can be added):
+   - Tools like `husky` can scan for secrets before commit
+   - Blocks commits containing suspicious patterns
+
+3. **Code Review (Layer 3)**:
+   - Pull request template includes security checklist
+   - Reviewers verify no secrets in code or committed files
+
+4. **Runtime Protection (Layer 4)**:
+   - Server-only variables are never sent to client
+   - Next.js strips non-`NEXT_PUBLIC_` variables from client bundle
+
+5. **Damage Control (Layer 5)**:
+   - If `.env.local` is somehow committed:
+     - Immediately rotate all secrets (JWT_SECRET, database passwords)
+     - Remove file from Git history: `git filter-branch` or BFG Repo-Cleaner
+     - Revoke compromised credentials
+
+**Example Incident Response:**
+```bash
+# If .env.local was committed:
+# 1. Remove from repository
+git rm --cached .env.local
+git commit -m "Remove accidentally committed .env.local"
+
+# 2. Remove from Git history (use BFG)
+bfg --delete-files .env.local
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+
+# 3. Rotate all secrets immediately
+# - Generate new JWT_SECRET
+# - Change database passwords
+# - Update Redis credentials
+```
+
+---
+
+### 📝 Setup Instructions
+
+1. **Copy the template:**
+   ```bash
+   cp .env.example .env.local
+   ```
+
+2. **Fill in actual values:**
+   Edit `.env.local` with your real configuration:
+   ```env
+   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/reliefync_db"
+   JWT_SECRET="generate-using-openssl-rand-base64-32"
+   REDIS_URL="redis://localhost:6379"
+   APP_NAME="ReliefSync"
+   ```
+
+3. **Verify protection:**
+   ```bash
+   # Check that .env.local is ignored
+   git status
+   # .env.local should NOT appear in untracked files
+   ```
+
+4. **Generate secure secrets:**
+   ```bash
+   # Generate a secure JWT secret
+   openssl rand -base64 32
+   ```
+
+---
+
+### 🔍 Where Variables Are Used
+
+| File | Variables Used | Purpose |
+|------|----------------|---------|
+| [src/lib/auth.ts](src/lib/auth.ts#L8) | `JWT_SECRET` | JWT token signing and verification |
+| [src/lib/prisma.ts](src/lib/prisma.ts#L22) | `DATABASE_URL`, `NODE_ENV` | Database connection and logging |
+| [src/lib/redis.ts](src/lib/redis.ts#L12) | `REDIS_URL` | Redis caching connection |
+| [prisma/seed.ts](prisma/seed.ts#L8) | `DATABASE_URL` | Database seeding |
+
+---
+
+### 🎓 Learning Reflection
+
+**Key Takeaways:**
+
+1. **Separation of Concerns**: 
+   - Server secrets stay on the server (no `NEXT_PUBLIC_` prefix)
+   - Client variables are intentionally public (with `NEXT_PUBLIC_` prefix)
+
+2. **Defense in Depth**: 
+   - Multiple security layers prevent single points of failure
+   - `.gitignore` + code reviews + Next.js scoping = robust protection
+
+3. **Documentation is Security**: 
+   - `.env.example` serves as both template and documentation
+   - Team members know exactly what to configure
+
+4. **Incident Response Readiness**: 
+   - We have a plan if secrets are accidentally exposed
+   - Rotation procedures are documented and rehearsed
+
+5. **Build-Time vs Runtime**: 
+   - `NEXT_PUBLIC_` variables are embedded at build time
+   - Server variables are resolved at runtime
+   - Understanding this difference prevents security mistakes
+
+**Common Pitfalls Avoided:**
+- ❌ Hardcoding secrets in source code
+- ❌ Using `NEXT_PUBLIC_` for sensitive data
+- ❌ Committing `.env.local` to version control
+- ❌ Forgetting fallback values for development
+- ❌ Not documenting required variables
 
 ---
 
