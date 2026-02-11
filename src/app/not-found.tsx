@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from "next/link";
 
 export default function NotFound() {
   return (
@@ -11,7 +11,8 @@ export default function NotFound() {
           Page Not Found
         </p>
         <p className="mb-8 max-w-lg text-lg text-slate-600 dark:text-slate-400">
-          The relief request or page you're looking for doesn't exist or has been moved.
+          The relief request or page you&apos;re looking for doesn&apos;t exist
+          or has been moved.
         </p>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
@@ -31,7 +32,7 @@ export default function NotFound() {
 
         <div className="mt-12">
           <p className="text-slate-600 dark:text-slate-400">
-            If you believe this is an error, please{' '}
+            If you believe this is an error, please{" "}
             <a
               href="mailto:support@reliefsync.org"
               className="font-medium text-blue-600 hover:underline dark:text-blue-400"

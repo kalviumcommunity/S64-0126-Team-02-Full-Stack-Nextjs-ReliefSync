@@ -14,11 +14,16 @@ import { verifyToken, extractToken, type DecodedToken } from "@/lib/auth";
  * 4. Passes validated user info to downstream handlers via custom headers
  */
 
-// Page routes that require authentication
-const PROTECTED_PAGE_ROUTES = ["/dashboard", "/requests"];
+const PUBLIC_ROUTES = ["/login", "/signup"];
 
-// API routes that require authentication
-const PROTECTED_API_ROUTES = ["/api/users", "/api/allocations", "/api/inventory", "/api/organizations"];
+const PUBLIC_API_ROUTES = ["/api/auth/login", "/api/auth/signup"];
+
+const PUBLIC_ASSET_PREFIXES = [
+  "/_next",
+  "/favicon.ico",
+  "/robots.txt",
+  "/sitemap.xml",
+];
 
 // Routes that require specific roles (role => required roles)
 const ROLE_BASED_ROUTES: Record<string, string[]> = {
@@ -31,58 +36,75 @@ const ROLE_BASED_ROUTES: Record<string, string[]> = {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Check if route is a protected page
-  const isProtectedPage = PROTECTED_PAGE_ROUTES.some((route) => pathname.startsWith(route));
+  // Skip middleware for Next.js internals and common public assets
+  if (PUBLIC_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return NextResponse.next();
+  }
 
-  // Check if route is a protected API route
-  const isProtectedAPI = PROTECTED_API_ROUTES.some((route) => pathname.startsWith(route));
+  // Always allow auth endpoints
+  if (PUBLIC_API_ROUTES.some((route) => pathname.startsWith(route))) {
+    return NextResponse.next();
+  }
+
+  const isApiRoute = pathname.startsWith("/api/");
+
+  // Extract token from cookie or Authorization header
+  const token =
+    req.cookies.get("auth-token")?.value ||
+    extractToken(req.headers.get("authorization"));
+
+  // If user is already authenticated and visits /login, send them to /dashboard
+  if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route)) && token) {
+    const decoded = verifyToken(token) as DecodedToken | null;
+    if (decoded) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+  }
+
+  // Allow public routes without auth
+  if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
+    return NextResponse.next();
+  }
 
   // Check if route requires specific roles
   const requiredRoles = ROLE_BASED_ROUTES[pathname] || null;
 
-  // Skip middleware for non-protected routes
-  if (!isProtectedPage && !isProtectedAPI && !requiredRoles) {
-    return NextResponse.next();
-  }
-
-  // Extract token from cookie or Authorization header
-  const token = req.cookies.get("auth-token")?.value || 
-                extractToken(req.headers.get("authorization"));
-
   // No token provided
   if (!token) {
-    // For page routes, redirect to login
-    if (isProtectedPage) {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
     // For API routes, return JSON error
-    return NextResponse.json(
-      {
-        success: false,
-        code: "MISSING_TOKEN",
-        message: "Authentication required. Please provide a valid token.",
-      },
-      { status: 401 }
-    );
+    if (isApiRoute) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "MISSING_TOKEN",
+          message: "Authentication required. Please provide a valid token.",
+        },
+        { status: 401 }
+      );
+    }
+
+    // For page routes, redirect to login
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
   // Verify token
   const decoded = verifyToken(token) as DecodedToken | null;
 
   if (!decoded) {
-    // For page routes, redirect to login
-    if (isProtectedPage) {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
     // For API routes, return JSON error
-    return NextResponse.json(
-      {
-        success: false,
-        code: "INVALID_TOKEN",
-        message: "Invalid or expired token. Please authenticate again.",
-      },
-      { status: 403 }
-    );
+    if (isApiRoute) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INVALID_TOKEN",
+          message: "Invalid or expired token. Please authenticate again.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // For page routes, redirect to login
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
   // Check role-based access control
@@ -115,13 +137,5 @@ export function middleware(req: NextRequest) {
  * This ensures the middleware only checks specific patterns for efficiency
  */
 export const config = {
-  matcher: [
-    // Protect page routes
-    "/dashboard/:path*",
-    "/requests/:path*",
-    // Protect all API routes except auth (login/signup)
-    "/api/:path*",
-    // Exclude auth routes
-    "!(api/auth/login|api/auth/signup)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

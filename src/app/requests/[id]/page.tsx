@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface RequestDetail {
   id: string;
   title: string;
   description: string;
   location: string;
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  status: 'pending' | 'active' | 'completed' | 'cancelled';
+  priority: "low" | "medium" | "high" | "critical";
+  status: "pending" | "active" | "completed" | "cancelled";
   createdAt: string;
   updatedAt: string;
   requesterName?: string;
@@ -26,7 +26,7 @@ export default function RequestDetailPage({
 }) {
   const [request, setRequest] = useState<RequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -35,34 +35,36 @@ export default function RequestDetailPage({
         const response = await fetch(`/api/allocations/${params.id}`);
         if (!response.ok) {
           if (response.status === 401) {
-            router.push('/login');
+            router.push("/login");
             return;
           }
-          setError('Request not found');
+          setError("Request not found");
           return;
         }
 
-        const data = await response.json();
-        
+        await response.json();
+
         // Use mock data for now - replace with actual API data
         setRequest({
           id: params.id,
-          title: 'Medical Supply Shortage',
+          title: "Medical Supply Shortage",
           description:
-            'Critical need for antibiotics and IV fluids in emergency ward. The hospital is experiencing a severe shortage due to the disaster impact on supply chain.',
-          location: 'Central Hospital, Downtown District',
-          priority: 'critical',
-          status: 'active',
-          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+            "Critical need for antibiotics and IV fluids in emergency ward. The hospital is experiencing a severe shortage due to the disaster impact on supply chain.",
+          location: "Central Hospital, Downtown District",
+          priority: "critical",
+          status: "active",
+          createdAt: new Date(
+            Date.now() - 2 * 24 * 60 * 60 * 1000
+          ).toISOString(),
           updatedAt: new Date().toISOString(),
-          requesterName: 'Dr. James Smith',
-          requesterEmail: 'james.smith@centralhospital.org',
-          estimatedNeeds: '500 units antibiotics, 200 IV fluid sets',
+          requesterName: "Dr. James Smith",
+          requesterEmail: "james.smith@centralhospital.org",
+          estimatedNeeds: "500 units antibiotics, 200 IV fluid sets",
           currentAllocations: 3,
         });
       } catch (error) {
-        console.error('Failed to fetch request:', error);
-        setError('Failed to load request details');
+        console.error("Failed to fetch request:", error);
+        setError("Failed to load request details");
       } finally {
         setLoading(false);
       }
@@ -74,7 +76,9 @@ export default function RequestDetailPage({
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-slate-600 dark:text-slate-400">Loading...</div>
+        <div className="text-lg text-slate-600 dark:text-slate-400">
+          Loading...
+        </div>
       </div>
     );
   }
@@ -85,7 +89,7 @@ export default function RequestDetailPage({
         <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="rounded-lg bg-white p-12 text-center shadow dark:bg-slate-800">
             <p className="text-lg text-slate-600 dark:text-slate-400">
-              {error || 'Request not found'}
+              {error || "Request not found"}
             </p>
             <Link
               href="/requests"
@@ -100,17 +104,20 @@ export default function RequestDetailPage({
   }
 
   const priorityColors = {
-    low: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-    medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-    high: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-    critical: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    low: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+    medium:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+    high: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+    critical: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
   };
 
   const statusColors = {
-    pending: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300',
-    active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-    completed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-    cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    pending: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300",
+    active:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+    completed:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+    cancelled: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
   };
 
   return (
@@ -175,7 +182,7 @@ export default function RequestDetailPage({
                     Estimated Needs
                   </dt>
                   <dd className="text-slate-900 dark:text-white">
-                    {request.estimatedNeeds || 'Not specified'}
+                    {request.estimatedNeeds || "Not specified"}
                   </dd>
                 </div>
                 <div className="flex justify-between border-b border-slate-200 pb-4 dark:border-slate-700">
@@ -183,7 +190,7 @@ export default function RequestDetailPage({
                     Created
                   </dt>
                   <dd className="text-slate-900 dark:text-white">
-                    {new Date(request.createdAt).toLocaleDateString()} at{' '}
+                    {new Date(request.createdAt).toLocaleDateString()} at{" "}
                     {new Date(request.createdAt).toLocaleTimeString()}
                   </dd>
                 </div>
@@ -192,7 +199,7 @@ export default function RequestDetailPage({
                     Last Updated
                   </dt>
                   <dd className="text-slate-900 dark:text-white">
-                    {new Date(request.updatedAt).toLocaleDateString()} at{' '}
+                    {new Date(request.updatedAt).toLocaleDateString()} at{" "}
                     {new Date(request.updatedAt).toLocaleTimeString()}
                   </dd>
                 </div>
@@ -209,10 +216,10 @@ export default function RequestDetailPage({
               </h3>
               <div className="space-y-2">
                 <p className="text-slate-700 dark:text-slate-300">
-                  {request.requesterName || 'Unknown'}
+                  {request.requesterName || "Unknown"}
                 </p>
                 <p className="break-words text-sm text-slate-600 dark:text-slate-400">
-                  {request.requesterEmail || 'No email'}
+                  {request.requesterEmail || "No email"}
                 </p>
               </div>
             </div>

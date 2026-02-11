@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import React, { createContext, useState, ReactNode } from 'react';
+import { createContext, useState, ReactNode } from "react";
 
 interface AuthContextType {
   user: string | null;
@@ -8,7 +8,9 @@ interface AuthContextType {
   logout: () => void;
 }
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(
+  undefined
+);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<string | null>(null);
@@ -29,9 +31,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

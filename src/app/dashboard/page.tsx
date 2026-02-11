@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface DashboardStats {
   activeRequests: number;
@@ -11,24 +11,32 @@ interface DashboardStats {
   totalInventory: number;
 }
 
+interface StoredUser {
+  id?: number;
+  email?: string;
+  name?: string;
+  role?: string;
+  organizationId?: number | null;
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<StoredUser | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         // Fetch dashboard stats
-        const statsResponse = await fetch('/api/allocations');
+        const statsResponse = await fetch("/api/allocations");
         if (!statsResponse.ok) {
-          router.push('/login');
+          router.push("/login");
           return;
         }
 
-        const statsData = await statsResponse.json();
-        
+        await statsResponse.json();
+
         // For now, use mock data - replace with actual API calls
         setStats({
           activeRequests: 12,
@@ -38,13 +46,13 @@ export default function DashboardPage() {
         });
 
         // Try to get user info from localStorage or API
-        const userInfo = localStorage.getItem('user');
+        const userInfo = localStorage.getItem("user");
         if (userInfo) {
-          setUser(JSON.parse(userInfo));
+          setUser(JSON.parse(userInfo) as StoredUser);
         }
       } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
-        router.push('/login');
+        console.error("Failed to fetch dashboard data:", error);
+        router.push("/login");
       } finally {
         setLoading(false);
       }
@@ -56,7 +64,9 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-slate-600 dark:text-slate-400">Loading...</div>
+        <div className="text-lg text-slate-600 dark:text-slate-400">
+          Loading...
+        </div>
       </div>
     );
   }
@@ -70,7 +80,7 @@ export default function DashboardPage() {
             Dashboard
           </h1>
           <p className="mt-2 text-slate-600 dark:text-slate-400">
-            Welcome back, {user?.email || 'Relief Coordinator'}
+            Welcome back, {user?.email || "Relief Coordinator"}
           </p>
         </div>
 
@@ -135,7 +145,7 @@ export default function DashboardPage() {
           </div>
           <div className="p-6">
             <p className="text-slate-600 dark:text-slate-400">
-              View the latest relief requests by going to{' '}
+              View the latest relief requests by going to{" "}
               <Link
                 href="/requests"
                 className="font-medium text-blue-600 hover:underline dark:text-blue-400"
@@ -159,26 +169,27 @@ function StatCard({
   title: string;
   value: number;
   description: string;
-  color: 'blue' | 'green' | 'purple' | 'orange';
+  color: "blue" | "green" | "purple" | "orange";
 }) {
   const colorClasses = {
-    blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-    green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-    purple: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800',
-    orange: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800',
+    blue: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800",
+    green:
+      "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
+    purple:
+      "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800",
+    orange:
+      "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800",
   };
 
   const textClasses = {
-    blue: 'text-blue-900 dark:text-blue-200',
-    green: 'text-green-900 dark:text-green-200',
-    purple: 'text-purple-900 dark:text-purple-200',
-    orange: 'text-orange-900 dark:text-orange-200',
+    blue: "text-blue-900 dark:text-blue-200",
+    green: "text-green-900 dark:text-green-200",
+    purple: "text-purple-900 dark:text-purple-200",
+    orange: "text-orange-900 dark:text-orange-200",
   };
 
   return (
-    <div
-      className={`rounded-lg border p-6 ${colorClasses[color]}`}
-    >
+    <div className={`rounded-lg border p-6 ${colorClasses[color]}`}>
       <p className={`text-sm font-medium ${textClasses[color]}`}>{title}</p>
       <p className="mt-2 text-4xl font-bold text-slate-900 dark:text-white">
         {value}

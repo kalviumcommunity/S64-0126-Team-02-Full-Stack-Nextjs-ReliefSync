@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import useSWR, { mutate } from 'swr';
-import { fetcher } from '@/lib/fetcher';
+import { useState } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 
 interface User {
   id: string;
@@ -11,17 +11,18 @@ interface User {
 }
 
 export default function UsersPage() {
-  const { data: users, error, isLoading, mutate: mutateUsers } = useSWR<User[]>(
-    '/api/users',
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
-    }
-  );
+  const {
+    data: users,
+    error,
+    isLoading,
+    mutate: mutateUsers,
+  } = useSWR<User[]>("/api/users", fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60000,
+  });
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
+  const [editName, setEditName] = useState("");
 
   // Handle optimistic update example
   const handleUpdateUser = async (userId: string, newName: string) => {
@@ -35,7 +36,9 @@ export default function UsersPage() {
       user.id === userId ? { ...user, name: newName } : user
     );
     mutateUsers(updatedUsers, false);
-    console.log(`[SWR] Optimistic update: User ${userId} name changed to "${newName}"`);
+    console.log(
+      `[SWR] Optimistic update: User ${userId} name changed to "${newName}"`
+    );
 
     try {
       // Simulate API call (replace with actual API call)
@@ -48,11 +51,11 @@ export default function UsersPage() {
       // Revalidate data from server
       await mutateUsers();
       setEditingId(null);
-      setEditName('');
-      console.log('[SWR] Data revalidated from server');
+      setEditName("");
+      console.log("[SWR] Data revalidated from server");
     } catch (error) {
       // Rollback on error
-      console.error('[SWR] Update failed, rolling back:', error);
+      console.error("[SWR] Update failed, rolling back:", error);
       mutateUsers(originalUsers, false);
     }
   };
@@ -61,9 +64,13 @@ export default function UsersPage() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Users</h1>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+          Users
+        </h1>
         <div className="flex items-center justify-center py-12">
-          <div className="text-lg text-slate-600 dark:text-slate-400">Loading users...</div>
+          <div className="text-lg text-slate-600 dark:text-slate-400">
+            Loading users...
+          </div>
         </div>
       </div>
     );
@@ -73,10 +80,12 @@ export default function UsersPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Users</h1>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+          Users
+        </h1>
         <div className="rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-900/20 dark:text-red-400">
           <p className="font-semibold">Failed to load users</p>
-          <p className="text-sm">{error.message || 'An error occurred'}</p>
+          <p className="text-sm">{error.message || "An error occurred"}</p>
         </div>
       </div>
     );
@@ -86,7 +95,9 @@ export default function UsersPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Users</h1>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+          Users
+        </h1>
         <button
           onClick={() => mutateUsers()}
           className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
@@ -116,9 +127,11 @@ export default function UsersPage() {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <p className="font-semibold text-slate-900 dark:text-white">
-                    {user.name || 'Unnamed User'}
+                    {user.name || "Unnamed User"}
                   </p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">{user.email}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    {user.email}
+                  </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
                     ID: {user.id}
                   </p>
@@ -151,7 +164,7 @@ export default function UsersPage() {
                   <button
                     onClick={() => {
                       setEditingId(user.id);
-                      setEditName(user.name || '');
+                      setEditName(user.name || "");
                     }}
                     className="rounded bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-900 hover:bg-slate-300 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
                   >
@@ -170,13 +183,12 @@ export default function UsersPage() {
           💾 SWR Data Fetching
         </p>
         <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-          • Click "Refresh" to revalidate data from server
+          • Click &quot;Refresh&quot; to revalidate data from server
           <br />
-          • Click "Edit" to test optimistic updates (check console)
+          • Click &quot;Edit&quot; to test optimistic updates (check console)
           <br />
           • Automatic deduping enabled (60s interval)
-          <br />
-          • Check browser console for SWR logs
+          <br />• Check browser console for SWR logs
         </p>
       </div>
     </div>
