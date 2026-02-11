@@ -1,12 +1,27 @@
-import { ReactNode } from 'react';
-import { Header } from './Header';
-import { Sidebar } from './Sidebar';
+"use client";
+
+import { ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { Header } from "./Header";
+import { Sidebar } from "./Sidebar";
 
 interface LayoutWrapperProps {
   children: ReactNode;
 }
 
 export function LayoutWrapper({ children }: LayoutWrapperProps) {
+  const pathname = usePathname();
+  const isAuthRoute =
+    pathname.startsWith("/login") || pathname.startsWith("/signup");
+
+  if (isAuthRoute) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-900">
       {/* Header */}

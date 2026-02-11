@@ -137,7 +137,7 @@ export { SIMULATION_CONFIG };
 // Development-only features
 if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   // Make utilities available in browser console for testing
-  (window as Record<string, unknown>).__devTools = {
+  (window as unknown as Record<string, unknown>).__devTools = {
     simulateDelay,
     simulateError,
     simulateRandomError,

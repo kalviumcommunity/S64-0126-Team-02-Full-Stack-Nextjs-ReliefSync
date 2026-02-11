@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useEffect, useState, ReactNode } from "react";
 
 interface UIContextType {
   theme: "light" | "dark";

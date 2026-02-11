@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signupSchema } from "@/lib/schemas/authSchema";
+import { generateToken } from "@/lib/auth";
 import {
   createValidationErrorResponse,
   createSuccessResponse,
@@ -67,7 +68,10 @@ export async function POST(req: Request) {
     // Hash the password with bcrypt
     // Salt rounds = 10 (higher = more secure but slower)
     const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(validatedData.password, saltRounds);
+    const hashedPassword = await bcrypt.hash(
+      validatedData.password,
+      saltRounds
+    );
 
     // Create new user with hashed password
     const newUser = await prisma.user.create({
@@ -91,7 +95,31 @@ export async function POST(req: Request) {
       },
     });
 
-    return createSuccessResponse("Signup successful", newUser, 201);
+    const token = generateToken({
+      id: newUser.id,
+      email: newUser.email,
+      role: newUser.role,
+    });
+
+    const response = createSuccessResponse(
+      "Signup successful",
+      {
+        user: newUser,
+        token,
+        expiresIn: "1h",
+      },
+      201
+    );
+
+    response.cookies.set("auth-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60,
+    });
+
+    return response;
   } catch (error) {
     if (error instanceof ZodError) {
       return createValidationErrorResponse(error);

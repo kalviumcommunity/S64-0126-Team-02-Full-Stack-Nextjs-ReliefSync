@@ -4,7 +4,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/schemas/authSchema";
 import { generateToken } from "@/lib/auth";
-import { createValidationErrorResponse, createErrorResponse } from "@/lib/validation";
+import {
+  createValidationErrorResponse,
+  createErrorResponse,
+} from "@/lib/validation";
 
 /**
  * POST /api/auth/login
@@ -88,7 +91,7 @@ export async function POST(req: Request) {
       organization: user.organization,
     };
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: "Login successful",
       data: {
@@ -97,6 +100,16 @@ export async function POST(req: Request) {
         expiresIn: "1h",
       },
     });
+
+    response.cookies.set("auth-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60,
+    });
+
+    return response;
   } catch (error) {
     if (error instanceof ZodError) {
       return createValidationErrorResponse(error);
