@@ -4,6 +4,7 @@ import { updateInventorySchema } from "@/lib/schemas/inventorySchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
 import { createValidationErrorResponse } from "@/lib/validation";
+import { getAuthUser, canModifyOrgResource } from "@/lib/authorization";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,8 +12,9 @@ type Params = { params: Promise<{ id: string }> };
  * GET /api/inventory/:id
  * Retrieves a specific inventory record by ID
  */
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
     const { id } = await params;
     const inventoryId = parseInt(id, 10);
 
@@ -36,6 +38,15 @@ export async function GET(_req: Request, { params }: Params) {
       );
     }
 
+    // Authorization: NGO users can only view their organization's inventory
+    if (!canModifyOrgResource(authUser, inventory.organizationId)) {
+      return sendError(
+        "Access denied: You can only view inventory from your organization",
+        ERROR_CODES.FORBIDDEN,
+        403
+      );
+    }
+
     return sendSuccess(inventory, "Inventory retrieved successfully");
   } catch (error) {
     return sendError(
@@ -53,6 +64,7 @@ export async function GET(_req: Request, { params }: Params) {
  */
 export async function PUT(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
     const { id } = await params;
     const inventoryId = parseInt(id, 10);
 
@@ -75,6 +87,15 @@ export async function PUT(req: Request, { params }: Params) {
         "Inventory record not found",
         ERROR_CODES.INVENTORY_NOT_FOUND,
         404
+      );
+    }
+
+    // Authorization: Check if user can modify this inventory
+    if (!canModifyOrgResource(authUser, existingInventory.organizationId)) {
+      return sendError(
+        "Access denied: You can only modify inventory from your organization",
+        ERROR_CODES.FORBIDDEN,
+        403
       );
     }
 
@@ -110,8 +131,9 @@ export async function PUT(req: Request, { params }: Params) {
  * DELETE /api/inventory/:id
  * Deletes an inventory record by ID
  */
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
     const { id } = await params;
     const inventoryId = parseInt(id, 10);
 
@@ -128,6 +150,15 @@ export async function DELETE(_req: Request, { params }: Params) {
         "Inventory record not found",
         ERROR_CODES.INVENTORY_NOT_FOUND,
         404
+      );
+    }
+
+    // Authorization: Check if user can delete this inventory
+    if (!canModifyOrgResource(authUser, existingInventory.organizationId)) {
+      return sendError(
+        "Access denied: You can only delete inventory from your organization",
+        ERROR_CODES.FORBIDDEN,
+        403
       );
     }
 

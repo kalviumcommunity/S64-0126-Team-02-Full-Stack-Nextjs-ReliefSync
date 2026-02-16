@@ -5,16 +5,16 @@ import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
 
+type Params = { params: Promise<{ id: string }> };
+
 /**
  * GET /api/inventory-items/[id]
  * Retrieves a single inventory item by ID
  */
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_req: Request, { params }: Params) {
+  const { id } = await params;
   try {
-    const itemId = parseInt(params.id, 10);
+    const itemId = parseInt(id, 10);
 
     if (isNaN(itemId)) {
       return sendError("Invalid item ID", ERROR_CODES.INVALID_ID, 400);
@@ -45,7 +45,7 @@ export async function GET(
 
     return sendSuccess(item, "Inventory item retrieved successfully");
   } catch (error) {
-    return handleDatabaseError(error, `GET /api/inventory-items/${params.id}`);
+    return handleDatabaseError(error, `GET /api/inventory-items/${id}`);
   }
 }
 
@@ -53,12 +53,10 @@ export async function GET(
  * PATCH /api/inventory-items/[id]
  * Updates an existing inventory item
  */
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: Request, { params }: Params) {
+  const { id } = await params;
   try {
-    const itemId = parseInt(params.id, 10);
+    const itemId = parseInt(id, 10);
 
     if (isNaN(itemId)) {
       return sendError("Invalid item ID", ERROR_CODES.INVALID_ID, 400);
@@ -115,15 +113,9 @@ export async function PATCH(
     return sendSuccess(updatedItem, "Inventory item updated successfully");
   } catch (error) {
     if (error instanceof ZodError) {
-      return handleValidationError(
-        error,
-        `PATCH /api/inventory-items/${params.id}`
-      );
+      return handleValidationError(error, `PATCH /api/inventory-items/${id}`);
     }
-    return handleDatabaseError(
-      error,
-      `PATCH /api/inventory-items/${params.id}`
-    );
+    return handleDatabaseError(error, `PATCH /api/inventory-items/${id}`);
   }
 }
 
@@ -131,12 +123,10 @@ export async function PATCH(
  * DELETE /api/inventory-items/[id]
  * Deletes an inventory item (only if not used in any inventories)
  */
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(_req: Request, { params }: Params) {
+  const { id } = await params;
   try {
-    const itemId = parseInt(params.id, 10);
+    const itemId = parseInt(id, 10);
 
     if (isNaN(itemId)) {
       return sendError("Invalid item ID", ERROR_CODES.INVALID_ID, 400);
@@ -172,9 +162,6 @@ export async function DELETE(
 
     return sendSuccess(null, "Inventory item deleted successfully");
   } catch (error) {
-    return handleDatabaseError(
-      error,
-      `DELETE /api/inventory-items/${params.id}`
-    );
+    return handleDatabaseError(error, `DELETE /api/inventory-items/${id}`);
   }
 }

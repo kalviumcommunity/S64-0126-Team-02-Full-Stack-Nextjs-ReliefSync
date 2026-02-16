@@ -1,15 +1,17 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import redis, { trackCacheKey, invalidateTrackedKeys } from "@/lib/redis";
 import { AllocationStatus } from "@prisma/client";
 import { createAllocationSchema } from "@/lib/schemas/allocationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 import {
   validatePaginationParams,
   validateIntParam,
   validateEnumParam,
 } from "@/lib/queryValidation";
+import { getAuthUser } from "@/lib/authorization";
 
 /**
  * GET /api/allocations
@@ -17,6 +19,10 @@ import {
  */
 export async function GET(req: Request) {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+    }
     const { searchParams } = new URL(req.url);
 
     // Validate pagination parameters
@@ -68,8 +74,9 @@ export async function GET(req: Request) {
     }
     const fromOrgId = fromOrgValidation.value;
 
-    // Create cache key based on query parameters
-    const cacheKey = `allocations:list:${page}:${limit}:${status || "all"}:${toOrgId || "all"}:${fromOrgId || "all"}`;
+    // Create cache key based on query parameters and user organization for NGO users
+    const orgScope = authUser.role === "NGO" ? authUser.organizationId : "all";
+    const cacheKey = `allocations:list:${orgScope}:${page}:${limit}:${status || "all"}:${toOrgId || "all"}:${fromOrgId || "all"}`;
 
     // Check Redis cache first (Cache-Aside Pattern)
     const cachedData = await redis.get(cacheKey);
@@ -88,6 +95,14 @@ export async function GET(req: Request) {
     if (status) where.status = status;
     if (toOrgId) where.toOrgId = toOrgId;
     if (fromOrgId) where.fromOrgId = fromOrgId;
+
+    // Authorization: NGO users can only view allocations involving their organization
+    if (authUser.role === "NGO" && authUser.organizationId) {
+      where.OR = [
+        { fromOrgId: authUser.organizationId },
+        { toOrgId: authUser.organizationId },
+      ];
+    }
 
     const whereClause = Object.keys(where).length > 0 ? where : undefined;
 
@@ -120,6 +135,7 @@ export async function GET(req: Request) {
       180,
       JSON.stringify({ data: responseData, pagination })
     );
+    await trackCacheKey("cache:allocations:list", cacheKey, 180);
 
     return sendSuccess(
       responseData,
@@ -138,10 +154,32 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+    }
     const body = await req.json();
 
     // Validate request body with Zod
     const validatedData = createAllocationSchema.parse(body);
+
+    // Authorization: NGO users can only create allocations from their organization
+    if (authUser.role === "NGO") {
+      if (
+        validatedData.fromOrgId &&
+        validatedData.fromOrgId !== authUser.organizationId
+      ) {
+        return sendError(
+          "Access denied: You can only create allocations from your organization",
+          "FORBIDDEN",
+          403
+        );
+      }
+      // If fromOrgId not specified, default to user's organization for NGO users
+      if (!validatedData.fromOrgId) {
+        validatedData.fromOrgId = authUser.organizationId || null;
+      }
+    }
 
     // Check if recipient organization exists
     const toOrg = await prisma.organization.findUnique({
@@ -191,11 +229,10 @@ export async function POST(req: Request) {
     });
 
     // Invalidate cache after creating new allocation
-    const keys = await redis.keys("allocations:list:*");
-    if (keys.length > 0) {
-      await redis.del(...keys);
+    const deleted = await invalidateTrackedKeys("cache:allocations:list");
+    if (deleted > 0) {
       console.log(
-        `🗑️ Cache Invalidated: Cleared ${keys.length} allocation list caches`
+        `🗑️ Cache Invalidated: Cleared ${deleted} allocation list caches`
       );
     }
 

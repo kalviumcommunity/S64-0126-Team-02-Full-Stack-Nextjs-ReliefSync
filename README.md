@@ -20,6 +20,80 @@ Disaster relief operations often face delays due to uncoordinated data sharing b
 
 ---
 
+## ✨ Key Features
+
+### 🔐 Security & Authentication
+- JWT-based authentication with secure token management
+- Role-based access control (RBAC) for GOVERNMENT and NGO users
+- Organization-scoped data access (NGO users restricted to their organization)
+- Secure password hashing with bcrypt
+- Environment variable validation at startup
+
+### 📊 Core Functionality
+- **User Management**: Full CRUD with role-based permissions
+- **Organization Management**: NGO and government organization tracking
+- **Inventory Management**: Track relief supplies across organizations
+- **Inventory Items Catalog**: Master catalog of available relief items
+- **Allocation System**: Request and approve resource allocations with workflow validation
+  - Status transitions: PENDING → APPROVED → IN_TRANSIT → COMPLETED
+  - Role-based approvals (GOVERNMENT approves, NGO initiates/cancels)
+
+### 🚀 Performance & Reliability
+- **Redis Caching**: Cache-aside pattern with smart invalidation using Redis Sets
+- **Graceful Degradation**: App functions without Redis (caching disabled)
+- **Request Correlation IDs**: End-to-end request tracking for debugging
+- **Health Checks**: `/api/health` endpoint monitors DB and Redis connectivity
+- **Pagination**: All list endpoints support pagination (limit 1-100)
+
+### 🛡️ Data Integrity
+- Duplicate detection for emails and registration numbers
+- Relation validation (e.g., allocation itemId must exist)
+- Conflict-safe updates with proper HTTP 409 responses
+- Server-side input validation with Zod schemas
+
+### 📈 Operational Tools
+- Structured JSON logging with correlation IDs
+- Database seed verification script
+- Comprehensive query parameter validation
+- Standardized API error responses
+
+---
+
+## 🛠️ Available Commands
+
+### Development
+```bash
+npm run dev          # Start development server (http://localhost:3000)
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint for code quality
+```
+
+### Database Operations
+```bash
+npm run db:migrate   # Run database migrations
+npm run db:seed      # Seed database with sample data
+npm run db:reset     # Reset database (WARNING: deletes all data)
+npm run verify-seed  # Verify database is properly seeded
+```
+
+### API Testing Examples
+```bash
+# Health check
+curl http://localhost:3000/api/health
+
+# List users (requires auth token)
+curl -H "Cookie: auth-token=YOUR_TOKEN" \
+  http://localhost:3000/api/users?page=1&limit=10
+
+# Login
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"password123"}'
+```
+
+---
+
 ## Folder Structure
 ```
 src/
@@ -41,6 +115,11 @@ This structure ensures separation of concerns and supports scalability in future
 
 ## Setup Instructions
 
+### Prerequisites
+- Node.js 18+ and npm
+- PostgreSQL 14+
+- Redis 6+ (optional but recommended for caching)
+
 ### 1. Install Dependencies
 ```bash
 npm install
@@ -58,11 +137,87 @@ cp .env.example .env.local
 # Edit .env.local with your actual values
 ```
 
-### 3. Run Locally
+**Required Environment Variables:**
+```env
+# Database (REQUIRED)
+DATABASE_URL="postgresql://user:password@localhost:5432/reliefsync_dev"
+
+# JWT Secret (REQUIRED) - Must be at least 32 characters
+JWT_SECRET="your-super-secret-jwt-key-min-32-chars-long"
+
+# Redis (OPTIONAL - App works without Redis, but caching will be disabled)
+REDIS_URL="redis://localhost:6379"
+
+# Application
+APP_NAME="ReliefSync"
+NODE_ENV="development"
+```
+
+### 3. Database Setup
+
+Run database migrations and seed initial data:
+```bash
+# Run migrations
+npm run db:migrate
+
+# Seed the database with sample data
+npm run db:seed
+
+# Verify seed was successful
+npm run verify-seed
+```
+
+### 4. Run Locally
 ```bash
 npm run dev
 ```
-The application runs at ```http://localhost:3000```
+The application runs at `http://localhost:3000`
+
+### 5. Verify Installation
+
+Check system health:
+```bash
+curl http://localhost:3000/api/health
+```
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-02-16T...",
+  "checks": {
+    "api": { "status": "healthy", "message": "API is operational" },
+    "database": { "status": "healthy", "message": "Database connected" },
+    "redis": { "status": "healthy", "message": "Redis connected" }
+  }
+}
+```
+
+### Troubleshooting Startup Issues
+
+**Database Connection Failed:**
+```bash
+# Verify PostgreSQL is running
+psql -h localhost -U postgres -l
+
+# Check DATABASE_URL format
+echo $DATABASE_URL
+```
+
+**Redis Unavailable:**
+- Redis is optional - the app will run without it
+- To enable caching, ensure Redis is running:
+```bash
+# Check Redis
+redis-cli ping
+# Expected: PONG
+```
+
+**JWT Secret Missing:**
+```bash
+# Generate a secure secret
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
 
 ---
 

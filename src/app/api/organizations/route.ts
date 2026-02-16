@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import redis, { trackCacheKey, invalidateTrackedKeys } from "@/lib/redis";
 import { createOrganizationSchema } from "@/lib/schemas/organizationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
@@ -95,6 +95,7 @@ export async function GET(req: Request) {
       300,
       JSON.stringify({ data: responseData, pagination })
     );
+    await trackCacheKey("cache:organizations:list", cacheKey, 300);
 
     return sendSuccess(
       responseData,
@@ -136,11 +137,10 @@ export async function POST(req: Request) {
     });
 
     // Invalidate cache after creating new organization
-    const keys = await redis.keys("organizations:list:*");
-    if (keys.length > 0) {
-      await redis.del(...keys);
+    const deleted = await invalidateTrackedKeys("cache:organizations:list");
+    if (deleted > 0) {
       console.log(
-        `🗑️ Cache Invalidated: Cleared ${keys.length} organization list caches`
+        `🗑️ Cache Invalidated: Cleared ${deleted} organization list caches`
       );
     }
 

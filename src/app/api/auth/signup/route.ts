@@ -87,6 +87,7 @@ export async function POST(req: Request) {
       id: newUser.id,
       email: newUser.email,
       role: newUser.role,
+      organizationId: newUser.organizationId,
     });
 
     const response = sendSuccess(

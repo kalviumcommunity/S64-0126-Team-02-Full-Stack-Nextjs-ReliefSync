@@ -1,10 +1,15 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import redis, { invalidateTrackedKeys } from "@/lib/redis";
 import { updateOrganizationSchema } from "@/lib/schemas/organizationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
 import { createValidationErrorResponse } from "@/lib/validation";
+import {
+  getAuthUser,
+  canModifyOrgResource,
+  isGovernment,
+} from "@/lib/authorization";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -12,13 +17,23 @@ type Params = { params: Promise<{ id: string }> };
  * GET /api/organizations/:id
  * Retrieves a specific organization by ID
  */
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
     const { id } = await params;
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
       return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
+    }
+
+    // Authorization: NGO users can only view their own organization
+    if (!canModifyOrgResource(authUser, orgId)) {
+      return sendError(
+        "Access denied: You can only view your own organization",
+        ERROR_CODES.FORBIDDEN,
+        403
+      );
     }
 
     // Create cache key for specific organization
@@ -80,11 +95,21 @@ export async function GET(_req: Request, { params }: Params) {
  */
 export async function PUT(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
     const { id } = await params;
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
       return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
+    }
+
+    // Authorization: NGO users can only modify their own organization
+    if (!canModifyOrgResource(authUser, orgId)) {
+      return sendError(
+        "Access denied: You can only modify your own organization",
+        ERROR_CODES.FORBIDDEN,
+        403
+      );
     }
 
     const body = await req.json();
@@ -105,6 +130,23 @@ export async function PUT(req: Request, { params }: Params) {
       );
     }
 
+    // Check for duplicate registration number if it's being updated
+    if (
+      validatedData.registrationNo &&
+      validatedData.registrationNo !== existingOrg.registrationNo
+    ) {
+      const existingReg = await prisma.organization.findUnique({
+        where: { registrationNo: validatedData.registrationNo },
+      });
+      if (existingReg) {
+        return sendError(
+          "Registration number already in use by another organization",
+          ERROR_CODES.DUPLICATE_ENTRY,
+          409
+        );
+      }
+    }
+
     // Update organization
     const updatedOrg = await prisma.organization.update({
       where: { id: orgId },
@@ -113,12 +155,9 @@ export async function PUT(req: Request, { params }: Params) {
 
     // Invalidate caches after update
     await redis.del(`organization:${orgId}`); // Invalidate specific organization cache
-    const keys = await redis.keys("organizations:list:*"); // Invalidate all list caches
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    await invalidateTrackedKeys("cache:organizations:list"); // Invalidate all list caches
     console.log(
-      `🗑️ Cache Invalidated: organization:${orgId} and organizations:list:* patterns`
+      `🗑️ Cache Invalidated: organization:${orgId} and all tracked org list caches`
     );
 
     return sendSuccess(updatedOrg, "Organization updated successfully");
@@ -140,13 +179,23 @@ export async function PUT(req: Request, { params }: Params) {
  * DELETE /api/organizations/:id
  * Deletes an organization by ID
  */
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
     const { id } = await params;
     const orgId = parseInt(id, 10);
 
     if (isNaN(orgId)) {
       return sendError("Invalid organization ID", ERROR_CODES.INVALID_ID, 400);
+    }
+
+    // Authorization: Only GOVERNMENT users can delete organizations
+    if (!isGovernment(authUser)) {
+      return sendError(
+        "Access denied: Only government users can delete organizations",
+        ERROR_CODES.FORBIDDEN,
+        403
+      );
     }
 
     const existingOrg = await prisma.organization.findUnique({
@@ -165,12 +214,9 @@ export async function DELETE(_req: Request, { params }: Params) {
 
     // Invalidate caches after deletion
     await redis.del(`organization:${orgId}`); // Invalidate specific organization cache
-    const keys = await redis.keys("organizations:list:*"); // Invalidate all list caches
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    await invalidateTrackedKeys("cache:organizations:list"); // Invalidate all list caches
     console.log(
-      `🗑️ Cache Invalidated: organization:${orgId} and organizations:list:* patterns`
+      `🗑️ Cache Invalidated: organization:${orgId} and all tracked org list caches`
     );
 
     return sendSuccess(null, "Organization deleted successfully");

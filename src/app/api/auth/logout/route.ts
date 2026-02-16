@@ -7,7 +7,7 @@ import { sendSuccess } from "@/lib/responseHandler";
  * Response:
  * - 200: Logout successful
  */
-export async function POST(req: Request) {
+export async function POST() {
   // Create response with logout message
   const response = sendSuccess(null, "Logout successful", 200);
 
