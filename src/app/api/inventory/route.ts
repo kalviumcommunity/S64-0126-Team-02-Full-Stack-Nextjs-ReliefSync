@@ -1,8 +1,7 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createInventorySchema } from "@/lib/schemas/inventorySchema";
-import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
-import { sendSuccess } from "@/lib/responseHandler";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 
 /**
@@ -62,7 +61,7 @@ export async function POST(req: Request) {
       where: { id: validatedData.organizationId },
     });
     if (!org) {
-      return createErrorResponse("Organization not found", 404);
+      return sendError("Organization not found", "ORG_NOT_FOUND", 404);
     }
 
     // Check if inventory item exists
@@ -70,7 +69,7 @@ export async function POST(req: Request) {
       where: { id: validatedData.itemId },
     });
     if (!item) {
-      return createErrorResponse("Inventory item not found", 404);
+      return sendError("Inventory item not found", "ITEM_NOT_FOUND", 404);
     }
 
     // Upsert inventory record
@@ -94,11 +93,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return createSuccessResponse(
-      "Inventory updated successfully",
-      inventory,
-      201
-    );
+    return sendSuccess(inventory, "Inventory updated successfully", 201);
   } catch (error) {
     if (error instanceof ZodError) {
       return handleValidationError(error, "POST /api/inventory");

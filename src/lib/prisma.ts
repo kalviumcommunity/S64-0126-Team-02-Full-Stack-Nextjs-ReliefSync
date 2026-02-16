@@ -18,7 +18,15 @@ declare global {
   var prisma: PrismaClient | undefined;
 }
 
-const connectionString = `${process.env.DATABASE_URL}`;
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error(
+    "FATAL: DATABASE_URL environment variable is not set. " +
+      "Application cannot start without a database connection. " +
+      "Please set DATABASE_URL in your .env file."
+  );
+}
 
 const pool = new Pool({
   connectionString,

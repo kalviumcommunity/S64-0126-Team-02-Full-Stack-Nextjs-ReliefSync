@@ -3,8 +3,7 @@ import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import redis from "@/lib/redis";
 import { createUserSchema } from "@/lib/schemas/userSchema";
-import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
-import { sendSuccess } from "@/lib/responseHandler";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 
 /**
@@ -116,7 +115,11 @@ export async function POST(req: NextRequest) {
       where: { email: validatedData.email },
     });
     if (existingUser) {
-      return createErrorResponse("User with this email already exists", 400);
+      return sendError(
+        "User with this email already exists",
+        "DUPLICATE_EMAIL",
+        400
+      );
     }
 
     // Create new user
@@ -148,7 +151,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return createSuccessResponse("User created successfully", user, 201);
+    return sendSuccess(user, "User created successfully", 201);
   } catch (error) {
     if (error instanceof ZodError) {
       return handleValidationError(error, "POST /api/users");

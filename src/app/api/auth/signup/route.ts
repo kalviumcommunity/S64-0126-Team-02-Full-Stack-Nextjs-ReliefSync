@@ -1,14 +1,10 @@
-import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signupSchema } from "@/lib/schemas/authSchema";
 import { generateToken } from "@/lib/auth";
-import {
-  createValidationErrorResponse,
-  createSuccessResponse,
-  createErrorResponse,
-} from "@/lib/validation";
+import { createValidationErrorResponse } from "@/lib/validation";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
 
 /**
  * POST /api/auth/signup
@@ -39,12 +35,10 @@ export async function POST(req: Request) {
     });
 
     if (existingUser) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "User with this email already exists",
-        },
-        { status: 400 }
+      return sendError(
+        "User with this email already exists",
+        "DUPLICATE_EMAIL",
+        400
       );
     }
 
@@ -55,13 +49,7 @@ export async function POST(req: Request) {
       });
 
       if (!organization) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Organization not found",
-          },
-          { status: 400 }
-        );
+        return sendError("Organization not found", "ORG_NOT_FOUND", 400);
       }
     }
 
@@ -101,13 +89,13 @@ export async function POST(req: Request) {
       role: newUser.role,
     });
 
-    const response = createSuccessResponse(
-      "Signup successful",
+    const response = sendSuccess(
       {
         user: newUser,
         token,
         expiresIn: "1h",
       },
+      "Signup successful",
       201
     );
 
@@ -125,6 +113,6 @@ export async function POST(req: Request) {
       return createValidationErrorResponse(error);
     }
     console.error("Signup error:", error);
-    return createErrorResponse("Signup failed. Please try again.", 500);
+    return sendError("Signup failed. Please try again.", "INTERNAL_ERROR", 500);
   }
 }
