@@ -1,10 +1,15 @@
 import type { NextRequest } from "next/server";
 import { ZodError } from "zod";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import redis from "@/lib/redis";
 import { createUserSchema } from "@/lib/schemas/userSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
+import {
+  validatePaginationParams,
+  validateEnumParam,
+} from "@/lib/queryValidation";
 
 /**
  * GET /api/users
@@ -26,10 +31,29 @@ export async function GET(req: NextRequest) {
   try {
     // User info is validated and passed by middleware
     const { searchParams } = new URL(req.url);
-    const page = Number(searchParams.get("page")) || 1;
-    const limit = Number(searchParams.get("limit")) || 10;
-    const role = searchParams.get("role");
-    const skip = (page - 1) * limit;
+
+    // Validate pagination parameters
+    const paginationResult = validatePaginationParams(searchParams);
+    if (!paginationResult.success) {
+      return sendError(
+        "Invalid pagination parameters",
+        "INVALID_QUERY_PARAMS",
+        400,
+        paginationResult.errors
+      );
+    }
+    const { page, limit, skip } = paginationResult.data!;
+
+    // Validate role filter
+    const roleValidation = validateEnumParam(
+      searchParams.get("role"),
+      ["NGO", "GOVERNMENT"] as const,
+      "role"
+    );
+    if (!roleValidation.valid) {
+      return sendError(roleValidation.error!, "INVALID_QUERY_PARAMS", 400);
+    }
+    const role = roleValidation.value;
 
     // Create cache key based on query parameters
     const cacheKey = `users:list:${page}:${limit}:${role || "all"}`;
@@ -122,12 +146,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Hash the password with bcrypt
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(
+      validatedData.password,
+      saltRounds
+    );
+
     // Create new user
     const user = await prisma.user.create({
       data: {
         email: validatedData.email,
         name: validatedData.name,
-        passwordHash: validatedData.passwordHash,
+        passwordHash: hashedPassword,
         role: validatedData.role,
         organizationId: validatedData.organizationId || null,
       },

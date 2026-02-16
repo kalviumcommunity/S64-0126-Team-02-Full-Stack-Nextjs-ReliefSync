@@ -5,6 +5,11 @@ import { AllocationStatus } from "@prisma/client";
 import { createAllocationSchema } from "@/lib/schemas/allocationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
+import {
+  validatePaginationParams,
+  validateIntParam,
+  validateEnumParam,
+} from "@/lib/queryValidation";
 
 /**
  * GET /api/allocations
@@ -13,12 +18,55 @@ import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = Number(searchParams.get("page")) || 1;
-    const limit = Number(searchParams.get("limit")) || 10;
-    const status = searchParams.get("status") as AllocationStatus | null;
-    const toOrgId = searchParams.get("toOrgId");
-    const fromOrgId = searchParams.get("fromOrgId");
-    const skip = (page - 1) * limit;
+
+    // Validate pagination parameters
+    const paginationResult = validatePaginationParams(searchParams);
+    if (!paginationResult.success) {
+      return sendError(
+        "Invalid pagination parameters",
+        "INVALID_QUERY_PARAMS",
+        400,
+        paginationResult.errors
+      );
+    }
+    const { page, limit, skip } = paginationResult.data!;
+
+    // Validate status filter
+    const statusValidation = validateEnumParam(
+      searchParams.get("status"),
+      [
+        "PENDING",
+        "APPROVED",
+        "IN_TRANSIT",
+        "COMPLETED",
+        "REJECTED",
+        "CANCELLED",
+      ] as const,
+      "status"
+    );
+    if (!statusValidation.valid) {
+      return sendError(statusValidation.error!, "INVALID_QUERY_PARAMS", 400);
+    }
+    const status = statusValidation.value as AllocationStatus | undefined;
+
+    // Validate organization ID filters
+    const toOrgValidation = validateIntParam(
+      searchParams.get("toOrgId"),
+      "toOrgId"
+    );
+    if (!toOrgValidation.valid) {
+      return sendError(toOrgValidation.error!, "INVALID_QUERY_PARAMS", 400);
+    }
+    const toOrgId = toOrgValidation.value;
+
+    const fromOrgValidation = validateIntParam(
+      searchParams.get("fromOrgId"),
+      "fromOrgId"
+    );
+    if (!fromOrgValidation.valid) {
+      return sendError(fromOrgValidation.error!, "INVALID_QUERY_PARAMS", 400);
+    }
+    const fromOrgId = fromOrgValidation.value;
 
     // Create cache key based on query parameters
     const cacheKey = `allocations:list:${page}:${limit}:${status || "all"}:${toOrgId || "all"}:${fromOrgId || "all"}`;
@@ -38,8 +86,8 @@ export async function GET(req: Request) {
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
-    if (toOrgId) where.toOrgId = parseInt(toOrgId, 10);
-    if (fromOrgId) where.fromOrgId = parseInt(fromOrgId, 10);
+    if (toOrgId) where.toOrgId = toOrgId;
+    if (fromOrgId) where.fromOrgId = fromOrgId;
 
     const whereClause = Object.keys(where).length > 0 ? where : undefined;
 
@@ -115,6 +163,14 @@ export async function POST(req: Request) {
       if (!fromOrg) {
         return sendError("Source organization not found", "ORG_NOT_FOUND", 404);
       }
+    }
+
+    // Check if inventory item exists
+    const item = await prisma.inventoryItem.findUnique({
+      where: { id: validatedData.itemId },
+    });
+    if (!item) {
+      return sendError("Inventory item not found", "ITEM_NOT_FOUND", 404);
     }
 
     // Create allocation
