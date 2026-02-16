@@ -2,8 +2,7 @@ import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import redis from "@/lib/redis";
 import { createOrganizationSchema } from "@/lib/schemas/organizationSchema";
-import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
-import { sendSuccess } from "@/lib/responseHandler";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 
 /**
@@ -103,8 +102,9 @@ export async function POST(req: Request) {
       where: { registrationNo: validatedData.registrationNo },
     });
     if (existingOrg) {
-      return createErrorResponse(
+      return sendError(
         "Organization with this registration number already exists",
+        "DUPLICATE_REGISTRATION",
         400
       );
     }
@@ -123,11 +123,7 @@ export async function POST(req: Request) {
       );
     }
 
-    return createSuccessResponse(
-      "Organization created successfully",
-      organization,
-      201
-    );
+    return sendSuccess(organization, "Organization created successfully", 201);
   } catch (error) {
     if (error instanceof ZodError) {
       return handleValidationError(error, "POST /api/organizations");

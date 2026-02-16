@@ -3,9 +3,21 @@ import { NextResponse } from "next/server";
 
 /**
  * JWT Secret Key
- * In production, always use environment variable
+ * MUST be set via environment variable JWT_SECRET
+ *
+ * @throws Error if JWT_SECRET is not configured
  */
-const JWT_SECRET: Secret = process.env.JWT_SECRET || "supersecretkey";
+const JWT_SECRET: Secret = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      "FATAL: JWT_SECRET environment variable is not set. " +
+        "Application cannot start without a valid JWT secret. " +
+        "Please set JWT_SECRET in your .env file."
+    );
+  }
+  return secret;
+})();
 
 /**
  * JWT Token Expiry Time

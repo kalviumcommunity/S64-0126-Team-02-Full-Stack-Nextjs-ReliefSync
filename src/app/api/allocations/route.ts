@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma";
 import redis from "@/lib/redis";
 import { AllocationStatus } from "@prisma/client";
 import { createAllocationSchema } from "@/lib/schemas/allocationSchema";
-import { createSuccessResponse, createErrorResponse } from "@/lib/validation";
-import { sendSuccess } from "@/lib/responseHandler";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 
 /**
@@ -101,7 +100,11 @@ export async function POST(req: Request) {
       where: { id: validatedData.toOrgId },
     });
     if (!toOrg) {
-      return createErrorResponse("Recipient organization not found", 404);
+      return sendError(
+        "Recipient organization not found",
+        "ORG_NOT_FOUND",
+        404
+      );
     }
 
     // Check if source organization exists (if provided)
@@ -110,7 +113,7 @@ export async function POST(req: Request) {
         where: { id: validatedData.fromOrgId },
       });
       if (!fromOrg) {
-        return createErrorResponse("Source organization not found", 404);
+        return sendError("Source organization not found", "ORG_NOT_FOUND", 404);
       }
     }
 
@@ -140,9 +143,9 @@ export async function POST(req: Request) {
       );
     }
 
-    return createSuccessResponse(
-      "Allocation request created successfully",
+    return sendSuccess(
       allocation,
+      "Allocation request created successfully",
       201
     );
   } catch (error) {

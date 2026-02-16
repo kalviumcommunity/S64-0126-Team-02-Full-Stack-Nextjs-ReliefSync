@@ -1,18 +1,22 @@
 # Disaster Relief Coordination Platform
 
-This repository contains the base setup for a full-stack Disaster Relief Coordination Platform built using Next.js (TypeScript). This Sprint-1 deliverable focuses on initializing a clean, scalable project structure.
+This repository contains a full-stack Disaster Relief Coordination Platform built using Next.js (TypeScript), PostgreSQL, Prisma, and Redis.
+
+---
+
+## 🚀 Quick Start
+
+**New to this project? Start here:**  
+📘 **[QUICKSTART.md](QUICKSTART.md)** - Complete setup guide for local and Docker environments
+
+**Recent Updates:**  
+🔒 **[docs/P0_FIXES_COMPLETE.md](docs/P0_FIXES_COMPLETE.md)** - Security fixes and API standardization (Feb 2026)
 
 ---
 
 ## Problem Statement
 
 Disaster relief operations often face delays due to uncoordinated data sharing between NGOs and government bodies. This project aims to build a scalable platform to improve coordination and data visibility.
-
----
-
-## Sprint 1 – Project Initialization
-
-The objective of Sprint 1 is to set up a strong foundation using Next.js with TypeScript, following best practices for folder structure and documentation.
 
 ---
 

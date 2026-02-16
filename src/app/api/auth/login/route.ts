@@ -1,13 +1,10 @@
-import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/schemas/authSchema";
 import { generateToken } from "@/lib/auth";
-import {
-  createValidationErrorResponse,
-  createErrorResponse,
-} from "@/lib/validation";
+import { createValidationErrorResponse } from "@/lib/validation";
+import { sendSuccess, sendError } from "@/lib/responseHandler";
 
 /**
  * POST /api/auth/login
@@ -49,13 +46,7 @@ export async function POST(req: Request) {
 
     // Check if user exists
     if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "User not found",
-        },
-        { status: 404 }
-      );
+      return sendError("User not found", "USER_NOT_FOUND", 404);
     }
 
     // Verify password using bcrypt
@@ -65,13 +56,7 @@ export async function POST(req: Request) {
     );
 
     if (!isPasswordValid) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid credentials",
-        },
-        { status: 401 }
-      );
+      return sendError("Invalid credentials", "INVALID_CREDENTIALS", 401);
     }
 
     // Generate JWT token
@@ -91,15 +76,15 @@ export async function POST(req: Request) {
       organization: user.organization,
     };
 
-    const response = NextResponse.json({
-      success: true,
-      message: "Login successful",
-      data: {
+    const response = sendSuccess(
+      {
         user: userResponse,
         token,
         expiresIn: "1h",
       },
-    });
+      "Login successful",
+      200
+    );
 
     response.cookies.set("auth-token", token, {
       httpOnly: true,
@@ -115,6 +100,6 @@ export async function POST(req: Request) {
       return createValidationErrorResponse(error);
     }
     console.error("Login error:", error);
-    return createErrorResponse("Login failed. Please try again.", 500);
+    return sendError("Login failed. Please try again.", "INTERNAL_ERROR", 500);
   }
 }
