@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import redis from "@/lib/redis";
 import { updateUserSchema } from "@/lib/schemas/userSchema";
@@ -102,10 +103,21 @@ export async function PUT(req: Request, { params }: Params) {
       return sendError("User not found", ERROR_CODES.USER_NOT_FOUND, 404);
     }
 
+    // Hash password if it's being updated
+    const updateData: Record<string, unknown> = { ...validatedData };
+    if (validatedData.password) {
+      const saltRounds = 10;
+      updateData.passwordHash = await bcrypt.hash(
+        validatedData.password,
+        saltRounds
+      );
+      delete updateData.password; // Remove plain password from update data
+    }
+
     // Update user
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: validatedData,
+      data: updateData,
       select: {
         id: true,
         email: true,

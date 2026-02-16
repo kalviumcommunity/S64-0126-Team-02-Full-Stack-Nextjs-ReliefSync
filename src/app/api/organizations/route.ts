@@ -4,6 +4,10 @@ import redis from "@/lib/redis";
 import { createOrganizationSchema } from "@/lib/schemas/organizationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
+import {
+  validatePaginationParams,
+  validateBooleanParam,
+} from "@/lib/queryValidation";
 
 /**
  * GET /api/organizations
@@ -12,10 +16,28 @@ import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = Number(searchParams.get("page")) || 1;
-    const limit = Number(searchParams.get("limit")) || 10;
-    const isActive = searchParams.get("isActive");
-    const skip = (page - 1) * limit;
+
+    // Validate pagination parameters
+    const paginationResult = validatePaginationParams(searchParams);
+    if (!paginationResult.success) {
+      return sendError(
+        "Invalid pagination parameters",
+        "INVALID_QUERY_PARAMS",
+        400,
+        paginationResult.errors
+      );
+    }
+    const { page, limit, skip } = paginationResult.data!;
+
+    // Validate isActive filter
+    const isActiveValidation = validateBooleanParam(
+      searchParams.get("isActive"),
+      "isActive"
+    );
+    if (!isActiveValidation.valid) {
+      return sendError(isActiveValidation.error!, "INVALID_QUERY_PARAMS", 400);
+    }
+    const isActive = isActiveValidation.value;
 
     // Create cache key based on query parameters
     const cacheKey = `organizations:list:${page}:${limit}:${isActive || "all"}`;
@@ -33,8 +55,7 @@ export async function GET(req: Request) {
 
     console.log(`⚠️ Cache Miss: ${cacheKey} - Fetching from database`);
 
-    const where =
-      isActive !== null ? { isActive: isActive === "true" } : undefined;
+    const where = isActive !== undefined ? { isActive } : undefined;
 
     const [organizations, total] = await Promise.all([
       prisma.organization.findMany({

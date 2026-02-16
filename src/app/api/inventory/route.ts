@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { createInventorySchema } from "@/lib/schemas/inventorySchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
+import {
+  validatePaginationParams,
+  validateIntParam,
+} from "@/lib/queryValidation";
 
 /**
  * GET /api/inventory
@@ -11,14 +15,30 @@ import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = Number(searchParams.get("page")) || 1;
-    const limit = Number(searchParams.get("limit")) || 10;
-    const organizationId = searchParams.get("organizationId");
-    const skip = (page - 1) * limit;
 
-    const where = organizationId
-      ? { organizationId: parseInt(organizationId, 10) }
-      : undefined;
+    // Validate pagination parameters
+    const paginationResult = validatePaginationParams(searchParams);
+    if (!paginationResult.success) {
+      return sendError(
+        "Invalid pagination parameters",
+        "INVALID_QUERY_PARAMS",
+        400,
+        paginationResult.errors
+      );
+    }
+    const { page, limit, skip } = paginationResult.data!;
+
+    // Validate organizationId filter
+    const orgValidation = validateIntParam(
+      searchParams.get("organizationId"),
+      "organizationId"
+    );
+    if (!orgValidation.valid) {
+      return sendError(orgValidation.error!, "INVALID_QUERY_PARAMS", 400);
+    }
+    const organizationId = orgValidation.value;
+
+    const where = organizationId ? { organizationId } : undefined;
 
     const [inventories, total] = await Promise.all([
       prisma.inventory.findMany({
