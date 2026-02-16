@@ -7,6 +7,10 @@ interface SafeRedisClient {
   setex(key: RedisKey, seconds: number, value: string): Promise<"OK" | string>;
   keys(pattern: string): Promise<string[]>;
   del(...keys: RedisKey[]): Promise<number>;
+  sadd(key: RedisKey, ...members: string[]): Promise<number>;
+  smembers(key: RedisKey): Promise<string[]>;
+  srem(key: RedisKey, ...members: string[]): Promise<number>;
+  expire(key: RedisKey, seconds: number): Promise<number>;
 }
 
 /**
@@ -57,6 +61,67 @@ const redis: SafeRedisClient = {
       if (keys.length === 0) return 0;
       return await client!.del(...keys);
     }, 0),
+  sadd: (key, ...members) =>
+    safeCall(() => {
+      if (members.length === 0) return Promise.resolve(0);
+      return client!.sadd(key, ...members);
+    }, 0),
+  smembers: (key) => safeCall(() => client!.smembers(key), []),
+  srem: (key, ...members) =>
+    safeCall(() => {
+      if (members.length === 0) return Promise.resolve(0);
+      return client!.srem(key, ...members);
+    }, 0),
+  expire: (key, seconds) => safeCall(() => client!.expire(key, seconds), 0),
 };
+
+/**
+ * Cache invalidation helpers using Redis Sets for tracking
+ * This avoids expensive redis.keys() operations in production
+ */
+
+/**
+ * Track a cache key by adding it to a tracking set
+ * @param trackingSet - The set name (e.g., "cache:users:list")
+ * @param cacheKey - The actual cache key to track
+ * @param ttl - Optional TTL for the tracking set (default: 1 day)
+ */
+export async function trackCacheKey(
+  trackingSet: string,
+  cacheKey: string,
+  ttl: number = 86400
+): Promise<void> {
+  await redis.sadd(trackingSet, cacheKey);
+  await redis.expire(trackingSet, ttl);
+}
+
+/**
+ * Invalidate all cache keys tracked in a set
+ * @param trackingSet - The set name containing cache keys to invalidate
+ * @returns Number of keys deleted
+ */
+export async function invalidateTrackedKeys(
+  trackingSet: string
+): Promise<number> {
+  const keys = await redis.smembers(trackingSet);
+  if (keys.length === 0) return 0;
+
+  const deleted = await redis.del(...keys);
+  await redis.del(trackingSet); // Remove the tracking set itself
+  return deleted;
+}
+
+/**
+ * Invalidate a specific cache key and remove it from tracking
+ * @param trackingSet - The tracking set name
+ * @param cacheKey - The cache key to invalidate
+ */
+export async function invalidateCacheKey(
+  trackingSet: string,
+  cacheKey: string
+): Promise<void> {
+  await redis.del(cacheKey);
+  await redis.srem(trackingSet, cacheKey);
+}
 
 export default redis;

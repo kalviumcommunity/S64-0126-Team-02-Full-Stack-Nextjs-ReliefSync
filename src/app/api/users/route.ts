@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { ZodError } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import redis, { trackCacheKey, invalidateTrackedKeys } from "@/lib/redis";
 import { createUserSchema } from "@/lib/schemas/userSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
@@ -108,6 +108,7 @@ export async function GET(req: NextRequest) {
       300,
       JSON.stringify({ data: responseData, pagination })
     );
+    await trackCacheKey("cache:users:list", cacheKey, 300);
 
     return sendSuccess(
       responseData,
@@ -174,12 +175,9 @@ export async function POST(req: NextRequest) {
 
     // Invalidate cache after creating new user
     // Clear all user list caches to ensure fresh data
-    const keys = await redis.keys("users:list:*");
-    if (keys.length > 0) {
-      await redis.del(...keys);
-      console.log(
-        `🗑️ Cache Invalidated: Cleared ${keys.length} user list caches`
-      );
+    const deleted = await invalidateTrackedKeys("cache:users:list");
+    if (deleted > 0) {
+      console.log(`🗑️ Cache Invalidated: Cleared ${deleted} user list caches`);
     }
 
     return sendSuccess(user, "User created successfully", 201);

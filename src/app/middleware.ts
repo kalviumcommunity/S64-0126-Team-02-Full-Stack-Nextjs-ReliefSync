@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyToken, extractToken, type DecodedToken } from "@/lib/auth";
+import { generateCorrelationId, getCorrelationId } from "@/lib/logger";
 
 /**
  * Authorization Middleware
@@ -8,10 +9,11 @@ import { verifyToken, extractToken, type DecodedToken } from "@/lib/auth";
  * across protected API routes and pages.
  *
  * This middleware intercepts all incoming requests and:
- * 1. Extracts and validates JWT tokens from cookies
- * 2. Checks user roles against route requirements
- * 3. Denies access to unauthorized users and redirects to login
- * 4. Passes validated user info to downstream handlers via custom headers
+ * 1. Extracts or generates correlation IDs for request tracking
+ * 2. Extracts and validates JWT tokens from cookies
+ * 3. Checks user roles against route requirements
+ * 4. Denies access to unauthorized users and redirects to login
+ * 5. Passes validated user info and correlation ID to downstream handlers via custom headers
  */
 
 const PUBLIC_ROUTES = ["/login", "/signup"];
@@ -35,6 +37,9 @@ const ROLE_BASED_ROUTES: Record<string, string[]> = {
  */
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Generate or extract correlation ID for request tracking
+  const correlationId = getCorrelationId(req) || generateCorrelationId();
 
   // Skip middleware for Next.js internals and common public assets
   if (PUBLIC_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
@@ -119,11 +124,15 @@ export function middleware(req: NextRequest) {
     );
   }
 
-  // Middleware allows access - pass user info to downstream handlers
+  // Middleware allows access - pass user info and correlation ID to downstream handlers
   const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-correlation-id", correlationId);
   requestHeaders.set("x-user-id", decoded.id.toString());
   requestHeaders.set("x-user-email", decoded.email);
   requestHeaders.set("x-user-role", decoded.role);
+  if (decoded.organizationId) {
+    requestHeaders.set("x-user-org-id", decoded.organizationId.toString());
+  }
 
   return NextResponse.next({
     request: {

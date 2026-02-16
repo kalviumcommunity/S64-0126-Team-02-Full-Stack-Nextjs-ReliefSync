@@ -1,10 +1,15 @@
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import redis, { invalidateTrackedKeys } from "@/lib/redis";
 import { updateAllocationSchema } from "@/lib/schemas/allocationSchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { ERROR_CODES } from "@/lib/errorCodes";
 import { createValidationErrorResponse } from "@/lib/validation";
+import {
+  getAuthUser,
+  isValidStatusTransition,
+  canTransitionAllocationStatus,
+} from "@/lib/authorization";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -12,8 +17,13 @@ type Params = { params: Promise<{ id: string }> };
  * GET /api/allocations/:id
  * Retrieves a specific allocation by ID
  */
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+    }
+
     const { id } = await params;
     const allocationId = parseInt(id, 10);
 
@@ -28,8 +38,23 @@ export async function GET(_req: Request, { params }: Params) {
     const cachedData = await redis.get(cacheKey);
     if (cachedData) {
       console.log(`✅ Cache Hit: ${cacheKey}`);
+      const allocation = JSON.parse(cachedData);
+
+      // Authorization: NGO users can only view allocations involving their organization
+      if (
+        authUser.role === "NGO" &&
+        authUser.organizationId !== allocation.fromOrgId &&
+        authUser.organizationId !== allocation.toOrgId
+      ) {
+        return sendError(
+          "Access denied: You can only view allocations involving your organization",
+          ERROR_CODES.FORBIDDEN,
+          403
+        );
+      }
+
       return sendSuccess(
-        JSON.parse(cachedData),
+        allocation,
         "Allocation retrieved successfully (from cache)"
       );
     }
@@ -53,6 +78,19 @@ export async function GET(_req: Request, { params }: Params) {
       );
     }
 
+    // Authorization: NGO users can only view allocations involving their organization
+    if (
+      authUser.role === "NGO" &&
+      authUser.organizationId !== allocation.fromOrgId &&
+      authUser.organizationId !== allocation.toOrgId
+    ) {
+      return sendError(
+        "Access denied: You can only view allocations involving your organization",
+        ERROR_CODES.FORBIDDEN,
+        403
+      );
+    }
+
     // Cache allocation data for 5 minutes (300 seconds)
     await redis.setex(cacheKey, 300, JSON.stringify(allocation));
 
@@ -73,6 +111,11 @@ export async function GET(_req: Request, { params }: Params) {
  */
 export async function PUT(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+    }
+
     const { id } = await params;
     const allocationId = parseInt(id, 10);
 
@@ -96,6 +139,56 @@ export async function PUT(req: Request, { params }: Params) {
         ERROR_CODES.ALLOCATION_NOT_FOUND,
         404
       );
+    }
+
+    // Authorization: NGO users can only modify allocations involving their organization
+    if (
+      authUser.role === "NGO" &&
+      authUser.organizationId !== existingAllocation.fromOrgId &&
+      authUser.organizationId !== existingAllocation.toOrgId
+    ) {
+      return sendError(
+        "Access denied: You can only modify allocations involving your organization",
+        ERROR_CODES.FORBIDDEN,
+        403
+      );
+    }
+
+    // Workflow validation: If status is being updated, validate transition
+    if (
+      validatedData.status &&
+      validatedData.status !== existingAllocation.status
+    ) {
+      // Check if the status transition is valid
+      if (
+        !isValidStatusTransition(
+          existingAllocation.status,
+          validatedData.status
+        )
+      ) {
+        return sendError(
+          `Invalid status transition from ${existingAllocation.status} to ${validatedData.status}`,
+          ERROR_CODES.INVALID_STATUS_TRANSITION,
+          400
+        );
+      }
+
+      // Check if the user has permission to perform this transition
+      const canTransition = canTransitionAllocationStatus(
+        authUser,
+        existingAllocation.status,
+        validatedData.status,
+        existingAllocation.fromOrgId
+      );
+
+      if (!canTransition.allowed) {
+        return sendError(
+          canTransition.reason ||
+            `You do not have permission to transition this allocation from ${existingAllocation.status} to ${validatedData.status}`,
+          ERROR_CODES.FORBIDDEN,
+          403
+        );
+      }
     }
 
     // Build update data
@@ -128,12 +221,9 @@ export async function PUT(req: Request, { params }: Params) {
 
     // Invalidate caches after update
     await redis.del(`allocation:${allocationId}`); // Invalidate specific allocation cache
-    const keys = await redis.keys("allocations:list:*"); // Invalidate all list caches
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    await invalidateTrackedKeys("cache:allocations:list"); // Invalidate all list caches
     console.log(
-      `🗑️ Cache Invalidated: allocation:${allocationId} and allocations:list:* patterns`
+      `🗑️ Cache Invalidated: allocation:${allocationId} and all tracked allocation list caches`
     );
 
     return sendSuccess(updatedAllocation, "Allocation updated successfully");
@@ -155,8 +245,13 @@ export async function PUT(req: Request, { params }: Params) {
  * DELETE /api/allocations/:id
  * Deletes an allocation by ID
  */
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(req: Request, { params }: Params) {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+    }
+
     const { id } = await params;
     const allocationId = parseInt(id, 10);
 
@@ -176,16 +271,34 @@ export async function DELETE(_req: Request, { params }: Params) {
       );
     }
 
+    // Authorization: Check if user can delete this allocation
+    if (authUser.role === "NGO") {
+      // NGO users can only delete allocations from their organization
+      if (authUser.organizationId !== existingAllocation.fromOrgId) {
+        return sendError(
+          "Access denied: You can only delete allocations from your organization",
+          ERROR_CODES.FORBIDDEN,
+          403
+        );
+      }
+
+      // NGO users can only delete allocations in PENDING or CANCELLED status
+      if (!["PENDING", "CANCELLED"].includes(existingAllocation.status)) {
+        return sendError(
+          "Access denied: You can only delete allocations in PENDING or CANCELLED status",
+          ERROR_CODES.FORBIDDEN,
+          403
+        );
+      }
+    }
+
     await prisma.allocation.delete({ where: { id: allocationId } });
 
     // Invalidate caches after deletion
     await redis.del(`allocation:${allocationId}`); // Invalidate specific allocation cache
-    const keys = await redis.keys("allocations:list:*"); // Invalidate all list caches
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    await invalidateTrackedKeys("cache:allocations:list"); // Invalidate all list caches
     console.log(
-      `🗑️ Cache Invalidated: allocation:${allocationId} and allocations:list:* patterns`
+      `🗑️ Cache Invalidated: allocation:${allocationId} and all tracked allocation list caches`
     );
 
     return sendSuccess({ id: allocationId }, "Allocation deleted successfully");

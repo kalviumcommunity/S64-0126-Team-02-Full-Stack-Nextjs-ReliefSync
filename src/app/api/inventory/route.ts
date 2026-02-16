@@ -3,10 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { createInventorySchema } from "@/lib/schemas/inventorySchema";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 import { handleValidationError, handleDatabaseError } from "@/lib/errorHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 import {
   validatePaginationParams,
   validateIntParam,
 } from "@/lib/queryValidation";
+import { getAuthUser, canModifyOrgResource } from "@/lib/authorization";
 
 /**
  * GET /api/inventory
@@ -14,6 +16,10 @@ import {
  */
 export async function GET(req: Request) {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+    }
     const { searchParams } = new URL(req.url);
 
     // Validate pagination parameters
@@ -36,7 +42,12 @@ export async function GET(req: Request) {
     if (!orgValidation.valid) {
       return sendError(orgValidation.error!, "INVALID_QUERY_PARAMS", 400);
     }
-    const organizationId = orgValidation.value;
+    let organizationId = orgValidation.value;
+
+    // Authorization: NGO users can only view their organization's inventory
+    if (authUser.role === "NGO") {
+      organizationId = authUser.organizationId || undefined;
+    }
 
     const where = organizationId ? { organizationId } : undefined;
 
@@ -71,10 +82,23 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   try {
+    const authUser = getAuthUser(req);
+    if (!authUser) {
+      return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+    }
     const body = await req.json();
 
     // Validate request body with Zod
     const validatedData = createInventorySchema.parse(body);
+
+    // Authorization: NGO users can only create inventory for their organization
+    if (!canModifyOrgResource(authUser, validatedData.organizationId)) {
+      return sendError(
+        "Access denied: You can only create inventory for your organization",
+        "FORBIDDEN",
+        403
+      );
+    }
 
     // Check if organization exists
     const org = await prisma.organization.findUnique({
