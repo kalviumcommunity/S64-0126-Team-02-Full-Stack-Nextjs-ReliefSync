@@ -4,11 +4,11 @@ import { verifyToken, extractToken, type DecodedToken } from "@/lib/auth";
 import { generateCorrelationId, getCorrelationId } from "@/lib/logger";
 
 /**
- * Authorization Middleware
+ * Authorization Proxy
  * Validates JWT tokens and enforces role-based access control (RBAC)
  * across protected API routes and pages.
  *
- * This middleware intercepts all incoming requests and:
+ * This proxy intercepts all incoming requests and:
  * 1. Extracts or generates correlation IDs for request tracking
  * 2. Extracts and validates JWT tokens from cookies
  * 3. Checks user roles against route requirements
@@ -29,19 +29,19 @@ const PUBLIC_ASSET_PREFIXES = [
 
 // Routes that require specific roles (role => required roles)
 const ROLE_BASED_ROUTES: Record<string, string[]> = {
-  "/api/admin": ["GOVERNMENT"], // Only GOVERNMENT users can access admin routes
+  "/api/admin": ["GOVERNMENT"],
 };
 
 /**
- * Main middleware handler
+ * Main proxy handler
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Generate or extract correlation ID for request tracking
   const correlationId = getCorrelationId(req) || generateCorrelationId();
 
-  // Skip middleware for Next.js internals and common public assets
+  // Skip proxy for Next.js internals and common public assets
   if (PUBLIC_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
   }
@@ -76,7 +76,6 @@ export function middleware(req: NextRequest) {
 
   // No token provided
   if (!token) {
-    // For API routes, return JSON error
     if (isApiRoute) {
       return NextResponse.json(
         {
@@ -88,7 +87,6 @@ export function middleware(req: NextRequest) {
       );
     }
 
-    // For page routes, redirect to login
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
@@ -96,7 +94,6 @@ export function middleware(req: NextRequest) {
   const decoded = verifyToken(token) as DecodedToken | null;
 
   if (!decoded) {
-    // For API routes, return JSON error
     if (isApiRoute) {
       return NextResponse.json(
         {
@@ -108,7 +105,6 @@ export function middleware(req: NextRequest) {
       );
     }
 
-    // For page routes, redirect to login
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
@@ -124,7 +120,7 @@ export function middleware(req: NextRequest) {
     );
   }
 
-  // Middleware allows access - pass user info and correlation ID to downstream handlers
+  // Proxy allows access - pass user info and correlation ID to downstream handlers
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-correlation-id", correlationId);
   requestHeaders.set("x-user-id", decoded.id.toString());
@@ -141,10 +137,6 @@ export function middleware(req: NextRequest) {
   });
 }
 
-/**
- * Configure which routes the middleware should run on
- * This ensures the middleware only checks specific patterns for efficiency
- */
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
