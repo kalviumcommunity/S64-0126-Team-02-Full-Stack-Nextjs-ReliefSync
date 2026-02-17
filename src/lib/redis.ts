@@ -22,6 +22,23 @@ interface SafeRedisClient {
  */
 const redisUrl = process.env.REDIS_URL;
 let client: Redis | null = null;
+let hasLoggedConnectionError = false;
+let hasLoggedOperationError = false;
+
+const logConnectionErrorOnce = (message: string) => {
+  if (hasLoggedConnectionError) return;
+  hasLoggedConnectionError = true;
+  console.error("❌ Redis connection error:", message);
+};
+
+const logOperationErrorOnce = (message: string) => {
+  if (hasLoggedOperationError) return;
+  hasLoggedOperationError = true;
+  console.warn(
+    "⚠️ Redis unavailable; caching disabled for this process. Last error:",
+    message
+  );
+};
 
 if (redisUrl) {
   client = new Redis(redisUrl, {
@@ -34,7 +51,7 @@ if (redisUrl) {
   });
 
   client.on("error", (error) => {
-    console.error("❌ Redis connection error:", error.message);
+    logConnectionErrorOnce(error.message);
   });
 } else {
   console.warn("⚠️ REDIS_URL not set; caching is disabled.");
@@ -46,7 +63,7 @@ const safeCall = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
     return await fn();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("❌ Redis operation failed:", message);
+    logOperationErrorOnce(message);
     return fallback;
   }
 };

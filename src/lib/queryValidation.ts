@@ -26,9 +26,15 @@ export function validatePaginationParams(searchParams: URLSearchParams): {
   data?: { page: number; limit: number; skip: number };
   errors?: z.ZodIssue[];
 } {
+  const rawPage = searchParams.get("page");
+  const rawLimit = searchParams.get("limit");
+
+  const page = rawPage && rawPage.trim().length > 0 ? rawPage : undefined;
+  const limit = rawLimit && rawLimit.trim().length > 0 ? rawLimit : undefined;
+
   const result = paginationSchema.safeParse({
-    page: searchParams.get("page"),
-    limit: searchParams.get("limit"),
+    page,
+    limit,
   });
 
   if (!result.success) {

@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/schemas/authSchema";
 import { generateToken } from "@/lib/auth";
+import { getClientIdentifier, rateLimit } from "@/lib/rateLimit";
 import { createValidationErrorResponse } from "@/lib/validation";
 import { sendSuccess, sendError } from "@/lib/responseHandler";
 
@@ -27,6 +28,26 @@ export async function POST(req: Request) {
 
     // Validate request body with Zod
     const validatedData = loginSchema.parse(body);
+
+    const clientId = getClientIdentifier(req);
+    const rateKey = `auth:login:${clientId}:${validatedData.email.toLowerCase()}`;
+    const limit = rateLimit(rateKey, {
+      windowMs: Number(process.env.AUTH_LOGIN_WINDOW_MS) || 15 * 60 * 1000,
+      max: Number(process.env.AUTH_LOGIN_MAX_ATTEMPTS) || 10,
+    });
+
+    if (!limit.allowed) {
+      const response = sendError(
+        "Too many login attempts. Please try again later.",
+        "RATE_LIMITED",
+        429
+      );
+      response.headers.set(
+        "Retry-After",
+        Math.ceil((limit.resetAt - Date.now()) / 1000).toString()
+      );
+      return response;
+    }
 
     // Find user by email
     const user = await prisma.user.findUnique({

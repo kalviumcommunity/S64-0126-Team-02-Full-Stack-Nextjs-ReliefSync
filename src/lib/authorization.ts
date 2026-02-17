@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { extractToken, verifyToken } from "@/lib/auth";
 
 /**
  * Authorization utilities for role-based and resource-based access control
@@ -21,15 +22,35 @@ export function getAuthUser(req: NextRequest | Request): AuthUser | null {
   const role = headers.get("x-user-role");
   const orgId = headers.get("x-user-org-id");
 
-  if (!userId || !email || !role) {
+  if (userId && email && role) {
+    return {
+      id: parseInt(userId, 10),
+      email,
+      role: role as "NGO" | "GOVERNMENT",
+      organizationId: orgId ? parseInt(orgId, 10) : null,
+    };
+  }
+
+  const token = extractToken(headers.get("authorization"));
+  const cookieHeader = headers.get("cookie") || "";
+  const cookieTokenMatch = cookieHeader.match(/(?:^|;\s*)auth-token=([^;]+)/);
+  const cookieToken = cookieTokenMatch ? cookieTokenMatch[1] : null;
+  const fallbackToken = token || cookieToken;
+
+  if (!fallbackToken) {
+    return null;
+  }
+
+  const decoded = verifyToken(fallbackToken);
+  if (!decoded) {
     return null;
   }
 
   return {
-    id: parseInt(userId, 10),
-    email,
-    role: role as "NGO" | "GOVERNMENT",
-    organizationId: orgId ? parseInt(orgId, 10) : null,
+    id: decoded.id,
+    email: decoded.email,
+    role: decoded.role as "NGO" | "GOVERNMENT",
+    organizationId: decoded.organizationId ?? null,
   };
 }
 

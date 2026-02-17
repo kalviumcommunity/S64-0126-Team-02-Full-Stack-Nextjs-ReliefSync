@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import redis from "@/lib/redis";
+import { getAuthUser } from "@/lib/authorization";
+import { sendError } from "@/lib/responseHandler";
+import { ERROR_CODES } from "@/lib/errorCodes";
 
 /**
  * GET /api/health
@@ -15,7 +18,16 @@ import redis from "@/lib/redis";
  * - 200: All systems operational
  * - 503: One or more systems unavailable
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const authUser = getAuthUser(req);
+  if (!authUser) {
+    return sendError("Unauthorized", ERROR_CODES.UNAUTHORIZED, 401);
+  }
+
+  const appVersion =
+    process.env.APP_VERSION || process.env.npm_package_version || "unknown";
+  const environment = process.env.NODE_ENV || "development";
+
   const checks = {
     api: { status: "healthy", message: "API is operational" },
     database: { status: "unknown", message: "" },
@@ -59,6 +71,10 @@ export async function GET() {
   const response = {
     status: overallStatus === 200 ? "healthy" : "unhealthy",
     timestamp: new Date().toISOString(),
+    app: {
+      version: appVersion,
+      environment,
+    },
     checks,
   };
 

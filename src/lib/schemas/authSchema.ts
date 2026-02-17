@@ -22,6 +22,10 @@ export const signupSchema = z.object({
     .regex(
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
       "Password must contain at least one uppercase letter, one lowercase letter, and one number"
+    )
+    .regex(
+      /^(?=.*[^A-Za-z0-9])/,
+      "Password must contain at least one special character"
     ),
   role: z.enum(["NGO", "GOVERNMENT"], {
     message: "Role must be either NGO or GOVERNMENT",
@@ -39,13 +43,8 @@ export const signupSchema = z.object({
  * Validates input for user authentication
  */
 export const loginSchema = z.object({
-  email: z
-    .string()
-    .email("Invalid email address")
-    .min(1, "Email is required"),
-  password: z
-    .string()
-    .min(1, "Password is required"),
+  email: z.string().email("Invalid email address").min(1, "Email is required"),
+  password: z.string().min(1, "Password is required"),
 });
 
 /**
