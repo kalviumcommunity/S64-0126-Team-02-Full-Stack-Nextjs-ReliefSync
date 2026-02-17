@@ -21,7 +21,11 @@ export const createUserSchema = z.object({
     .max(100, "Password must not exceed 100 characters")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number"),
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(
+      /[^A-Za-z0-9]/,
+      "Password must contain at least one special character"
+    ),
   role: z.enum(["NGO", "GOVERNMENT"], {
     message: "Role must be either NGO or GOVERNMENT",
   }),
@@ -58,6 +62,10 @@ export const updateUserSchema = z.object({
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(
+      /[^A-Za-z0-9]/,
+      "Password must contain at least one special character"
+    )
     .optional(),
   role: z
     .enum(["NGO", "GOVERNMENT"], {

@@ -6,9 +6,23 @@
  * Usage: npm run verify-seed
  */
 
-import { PrismaClient } from "@prisma/client";
+import dotenv from "dotenv";
+import type { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+dotenv.config({ path: ".env.local", quiet: true });
+dotenv.config({ quiet: true });
+
+if (!process.env.DATABASE_URL) {
+  console.error(
+    "DATABASE_URL is not set. Add it to .env or .env.local before running verify-seed."
+  );
+  process.exit(1);
+}
+
+async function getPrismaClient(): Promise<PrismaClient> {
+  const prismaModule = await import("../src/lib/prisma");
+  return prismaModule.prisma as PrismaClient;
+}
 
 interface CheckResult {
   name: string;
@@ -21,8 +35,10 @@ async function verifySeed(): Promise<void> {
   console.log("🔍 Starting seed verification...\n");
 
   const checks: CheckResult[] = [];
+  let prisma: PrismaClient | null = null;
 
   try {
+    prisma = await getPrismaClient();
     // Check 1: Organizations exist
     const orgCount = await prisma.organization.count();
     checks.push({
@@ -101,17 +117,17 @@ async function verifySeed(): Promise<void> {
       },
     });
 
-    // Check 6: Data integrity - Users belong to organizations
+    // Check 6: Data integrity - NGO users belong to organizations
     const usersWithoutOrg = await prisma.user.count({
-      where: { organizationId: null },
+      where: { organizationId: null, role: "NGO" },
     });
     checks.push({
       name: "User-Organization Integrity",
-      passed: usersWithoutOrg === 0 || userCount === 0,
+      passed: usersWithoutOrg === 0 || ngoUserCount === 0,
       message:
         usersWithoutOrg === 0
-          ? "✅ All users are assigned to organizations"
-          : `⚠️  ${usersWithoutOrg} users without organization`,
+          ? "✅ All NGO users are assigned to organizations"
+          : `⚠️  ${usersWithoutOrg} NGO users without organization`,
       details: { usersWithoutOrg },
     });
 
@@ -165,7 +181,9 @@ async function verifySeed(): Promise<void> {
     console.log("   Run: npx prisma migrate deploy\n");
     process.exit(1);
   } finally {
-    await prisma.$disconnect();
+    if (prisma) {
+      await prisma.$disconnect();
+    }
   }
 }
 
